@@ -1,0 +1,9 @@
+{% extends 'base/layout.html' %}
+{% load static %}
+{% block title %}Room 3D{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'netbox_room_3d/viewer.css' %}">{% endblock %}
+{% block content %}
+<div id="room3d" data-api="{% url 'plugins:netbox_room_3d:locations' %}" data-initial-location="{{ initial_location }}"></div>
+{% csrf_token %}
+{% endblock %}
+{% block javascript %}<script type="module" src="{% static 'netbox_room_3d/viewer.js' %}"></script>{% endblock %}

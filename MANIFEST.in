@@ -1,0 +1,6 @@
+include README.md package.json package-lock.json vite.config.js playwright.config.js index.html compose.yaml
+recursive-include frontend *.js *.css
+recursive-include e2e *.js
+recursive-include dev *.py Dockerfile
+recursive-include netbox_room_3d/templates *.html
+recursive-include netbox_room_3d/static *.js *.css

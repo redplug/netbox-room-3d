@@ -1,0 +1,45 @@
+name: netbox-room3d-dev
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: local-development-only
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netbox"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+  netbox:
+    build:
+      context: .
+      dockerfile: dev/Dockerfile
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    ports: ["127.0.0.1:18080:8080"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: local-development-only
+      REDIS_HOST: redis
+      REDIS_CACHE_HOST: redis
+      SECRET_KEY: local-development-only-room3d-do-not-use-this-key-in-production-12345
+      ALLOWED_HOSTS: localhost 127.0.0.1 netbox
+      SKIP_SUPERUSER: "true"
+      ROOM3D_DEMO: "true"
+      PYTHONPATH: /plugin-live
+    volumes:
+      - ./dev/plugins.py:/etc/netbox/config/plugins.py:ro
+      - ./netbox_room_3d:/plugin-live/netbox_room_3d:ro
+      - media:/etc/netbox/media
+    # Editable code is imported from the bind mount; compiled assets are collected on startup.
+    command: ["/opt/netbox/venv/bin/python", "/opt/netbox/netbox/manage.py", "runserver", "0.0.0.0:8080", "--insecure"]
+    entrypoint: ["/bin/bash", "-c", "export PYTHONPATH=/plugin-live; /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py migrate --no-input && /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py collectstatic --no-input >/dev/null && exec \"$$@\"", "--"]
+volumes:
+  pgdata:
+  media:

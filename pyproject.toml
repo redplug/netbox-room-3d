@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-room-3d"
+version = "0.1.1"
+description = "Location-based manual 3D rack layout viewer for NetBox"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+
+[tool.setuptools.packages.find]
+include = ["netbox_room_3d*"]
+
+[tool.setuptools.package-data]
+netbox_room_3d = ["templates/**/*.html", "static/**/*", "*.txt"]

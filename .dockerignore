@@ -1,0 +1,7 @@
+node_modules
+.git
+.dev
+.venv
+artifacts
+dist
+**/__pycache__
