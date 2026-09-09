@@ -38,3 +38,18 @@ PostgreSQL 17, Redis 7, Chromium / Playwright.
 실제 인벤토리 연결, 대규모 성능, 0U/블레이드 세부 배치는 별도 검증 대상입니다.
 
 스크린샷: `artifacts/netbox-verified.png`, `artifacts/netbox-front.png`, `artifacts/netbox-rear.png`.
+
+## v0.1.2 워킹 모드 및 업데이트 검증 (2026-09-09)
+
+- 단위 테스트 5개, 브라우저 시나리오 4개, NetBox 서버 테스트 12개 통과.
+- 워킹 이동·드래그 시점 회전·포커스 이탈 중단·Esc 종료·배치 미변경을 Chromium에서 확인.
+- 경계/장애물 충돌과 빈 시작 위치/공간 없음 테스트 통과.
+- v0.1.1 태그 대비 models.py, migrations/, services.py, views.py 변경 없음.
+- 로컬 NetBox 4.5.0에서 0.1.2 wheel 적용, collectstatic, 서비스 재시작 후
+  기존 RoomLayout 1건 dumpdata 출력이 업데이트 전후 바이트 단위로 동일함을 확인.
+  비교는 배치를 수정하는 브라우저 테스트 실행 전에 수행함.
+- 로컬 환경은 소스 bind mount를 사용하는 개발 Compose이며, 적용 전 설치 메타데이터는 0.1.0이었음.
+  따라서 운영과 동일한 순수 wheel v0.1.1 → v0.1.2 교체 실증은 아님.
+  v0.1.1과의 데이터 호환성은 DB/저장 코드 무변경 및 위 데이터 비교로 확인.
+- Django check 통과, makemigrations --check --dry-run 변경 없음, 0001_initial 적용 상태 확인.
+- 운영 서버는 변경하지 않음. 운영에서는 UPGRADE.md에 따라 백업과 전후 비교 필요.

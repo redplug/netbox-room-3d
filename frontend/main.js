@@ -17,7 +17,7 @@ root.innerHTML = `
     <div id="r3-notice" role="status" aria-live="polite" hidden></div>
     <div class="r3-workspace">
       <aside class="r3-library"><div class="r3-section-title"><h2>랙 라이브러리</h2><span id="r3-rack-count"></span></div><p class="r3-help">기존 랙을 화면으로 끌어다 배치하세요.</p><input id="r3-search" type="search" placeholder="랙 또는 서버 검색" aria-label="랙 또는 서버 검색"><label class="r3-check"><input type="checkbox" id="r3-show-placed"> 배치된 랙 포함</label><div id="r3-rack-list"></div><div class="r3-library-bottom"><span class="r3-eyebrow">ROOM OBJECTS</span><button data-action="add-block" class="r3-btn wide">＋ 장애물 블록</button><div id="r3-block-list"></div></div></aside>
-      <main class="r3-stage"><div class="r3-toolbar"><div class="r3-segment"><button data-action="view" data-view="3d" class="active">3D 보기</button><button data-action="view" data-view="top">평면 배치</button></div><div class="r3-tools"><button data-action="fit" title="전체 보기">전체 보기</button><button data-action="undo" title="되돌리기">↶ 되돌리기</button><label><input id="r3-snap" type="checkbox" checked> 격자 맞춤</label></div></div><div id="r3-canvas"></div><div class="r3-stage-footer"><span id="r3-scene-stats"></span><span id="r3-controls-help">드래그 회전 · 우클릭 이동 · 휠 확대</span></div><div id="r3-invalid" role="alert" hidden></div></main>
+      <main class="r3-stage"><div class="r3-toolbar"><div class="r3-segment"><button data-action="view" data-view="3d" class="active">3D 보기</button><button data-action="view" data-view="top">평면 배치</button><button data-action="view" data-view="walk">워킹 모드</button></div><div class="r3-tools"><button data-action="fit" title="전체 보기">전체 보기</button><button data-action="undo" title="되돌리기">↶ 되돌리기</button><label><input id="r3-snap" type="checkbox" checked> 격자 맞춤</label></div></div><div id="r3-canvas"></div><div class="r3-stage-footer"><span id="r3-scene-stats"></span><span id="r3-controls-help">드래그 회전 · 우클릭 이동 · 휠 확대</span></div><div id="r3-invalid" role="alert" hidden></div></main>
       <aside id="r3-inspector" class="r3-inspector"></aside>
     </div>
     <footer class="r3-footer"><span><i></i> ${api.demo ? '샘플 데이터 · 이 브라우저에 저장됩니다' : 'NetBox 인벤토리 · 레이아웃만 저장됩니다'}</span><div><label><input id="r3-grid" type="checkbox" checked> 격자</label><label><input id="r3-walls" type="checkbox" checked> 벽</label><label><input id="r3-labels" type="checkbox" checked> 이름</label><label><input id="r3-transparent" type="checkbox" checked> 투명 프레임</label></div></footer>
@@ -53,7 +53,9 @@ function render(keepInspector = false) {
   $('#r3-block-list').innerHTML = layout.blocks.map(b => `<button class="r3-block-item" data-action="select-block" data-id="${esc(b.id)}">▧ ${esc(b.name)}</button>`).join('');
   $('#r3-scene-stats').textContent = `${layout.placements.length} / ${data.racks.length} 랙 배치 · ${data.racks.filter(r => placed.has(r.id)).reduce((n, r) => n + r.devices.length, 0)} 장비`;
   $('#r3-invalid').hidden = !problems.length; $('#r3-invalid').textContent = problems.length ? `저장 전 확인 · ${problems.slice(0, 3).join(' / ')}` : '';
-  $('#r3-controls-help').textContent = mode === 'top' ? '랙 드래그 배치 · 우클릭 이동 · 휠 확대' : '드래그 회전 · 우클릭 이동 · 휠 확대';
+  $('#r3-controls-help').textContent = mode === 'walk' ? 'WASD / 방향키 이동 · 드래그 둘러보기 · Shift 빠르게 · Esc 종료' : mode === 'top' ? '랙 드래그 배치 · 우클릭 이동 · 휠 확대' : '드래그 회전 · 우클릭 이동 · 휠 확대';
+  $('[data-action=fit]').textContent = mode === 'walk' ? '시작 위치' : '전체 보기';
+  $('[data-action=fit]').title = mode === 'walk' ? '워킹 시작 위치로 이동' : '전체 보기';
   root.querySelectorAll('[data-action=view]').forEach(b => b.classList.toggle('active', b.dataset.view === mode));
   if (!keepInspector) inspector();
   root.querySelectorAll('select').forEach(el => el.classList.add('no-ts'));
@@ -111,7 +113,7 @@ root.addEventListener('click', async e => {
     else if (action === 'select-block') { selected = { blockId: button.dataset.id }; render(); }
     else if (action === 'device') { selected.deviceId = id; render(); }
     else if (action === 'place') place(id);
-    else if (action === 'view') { mode = button.dataset.view; scene.view(mode, selected); render(); }
+    else if (action === 'view') { mode = button.dataset.view; scene.view(mode, selected); mode = scene.mode; render(); }
     else if (action === 'fit') scene.view(mode, selected);
     else if (action === 'front' || action === 'rear') { mode = '3d'; scene.view(action, selected); render(); }
     else if (action === 'save' && canEdit()) {
@@ -169,6 +171,8 @@ window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); 
 async function start() {
   try {
     scene = new RoomScene($('#r3-canvas'), {
+      exitWalk: () => { mode = '3d'; scene.view(mode, selected); render(); },
+      walkError: () => notice('걸어 다닐 빈 공간이 없습니다. 서버실 배치를 확인하세요.', true),
       select: (rackId, deviceId) => { selected = { rackId, deviceId }; render(); }, drop: place,
       drag: (id, x, z) => {
         if (!canEdit()) return;

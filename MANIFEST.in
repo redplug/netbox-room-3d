@@ -1,4 +1,4 @@
-include README.md package.json package-lock.json vite.config.js playwright.config.js index.html compose.yaml
+include README.md UPGRADE.md RELEASE_NOTES.md VERIFICATION.md package.json package-lock.json vite.config.js playwright.config.js index.html compose.yaml
 recursive-include frontend *.js *.css
 recursive-include e2e *.js
 recursive-include dev *.py Dockerfile

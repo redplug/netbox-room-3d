@@ -102,3 +102,31 @@ test('NetBox: save through UI, verify database API, front/rear images and appear
   await page.screenshot({ path: 'artifacts/netbox-verified.png', fullPage: true });
   expect(errors).toEqual([]); expect(failedImages).toEqual([]);
 });
+
+test('sample: walking mode moves, looks around, stops on blur and exits without editing', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:5173');
+  await expect(page.getByRole('heading', { name: 'A-01', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '워킹 모드', exact: true }).click();
+  const canvas = page.locator('#r3-canvas canvas');
+  await expect(canvas).toBeFocused();
+  await expect(page.locator('#r3-controls-help')).toContainText('WASD');
+  const initial = await canvas.screenshot();
+  await page.keyboard.down('w'); await page.waitForTimeout(400); await page.keyboard.up('w');
+  expect((await canvas.screenshot()).equals(initial)).toBe(false);
+  const bounds = await canvas.boundingBox();
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down(); await page.mouse.move(bounds.x + bounds.width / 2 + 120, bounds.y + bounds.height / 2 + 30, { steps: 8 }); await page.mouse.up();
+  await page.screenshot({ path: 'artifacts/walking-mode.png', fullPage: true });
+  await page.keyboard.down('w');
+  await page.locator('#r3-search').focus();
+  await page.keyboard.up('w');
+  const stopped = await canvas.screenshot(); await page.waitForTimeout(200);
+  expect((await canvas.screenshot()).equals(stopped)).toBe(true);
+  await canvas.focus(); await page.keyboard.press('Escape');
+  await expect(page.locator('[data-view="3d"]')).toHaveClass('active');
+  await expect(page.getByRole('button', { name: '배치 저장', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '평면 배치', exact: true }).click();
+  await expect(page.locator('#r3-controls-help')).toContainText('랙 드래그');
+  expect(errors).toEqual([]);
+});
