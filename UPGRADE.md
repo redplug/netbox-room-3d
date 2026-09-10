@@ -41,15 +41,38 @@ chmod 600 /secure-backup/room3d-before.json
 
 ## 2. 새 패키지 준비
 
-빈 다운로드 디렉터리에서 실행합니다. 기존 wheel은 삭제하지 않습니다.
+버전별 다운로드 디렉터리를 사용합니다. 기존 버전 wheel은 삭제하지 않습니다.
 
 ```sh
-gh release download v0.1.4 --repo redplug/netbox-room-3d \
-  --pattern 'netbox_room_3d-0.1.4-py3-none-any.whl' --pattern SHA256SUMS
-sha256sum --ignore-missing -c SHA256SUMS
+# 운영 Linux 호스트에서 실행합니다. 같은 버전의 재다운로드도 가능합니다.
+(
+  set -eu
+  mkdir -p ./room3d-downloads/v0.1.4
+  cd ./room3d-downloads/v0.1.4
+  gh release download v0.1.4 --repo redplug/netbox-room-3d \
+    --pattern 'netbox_room_3d-0.1.4-py3-none-any.whl' --pattern SHA256SUMS \
+    --clobber
+
+  # wheel이 실제로 있는지 확인하고 검증합니다.
+  # 함께 받지 않은 소스 압축파일의 체크섬은 건너뜁니다.
+  test -s netbox_room_3d-0.1.4-py3-none-any.whl
+  sha256sum --ignore-missing -c SHA256SUMS
+
+  # 검증 성공 시에만 운영용 플러그인 패키지 보관 폴더로 복사합니다.
+  sudo install -d -m 0755 /opt/netbox/plugin-wheels
+  sudo install -m 0644 netbox_room_3d-0.1.4-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.4-py3-none-any.whl
+  cmp netbox_room_3d-0.1.4-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.4-py3-none-any.whl
+)
 ```
 
-wheel을 기존 배포의 `plugin-wheels/`에 복사합니다. 운영 서버에 Node.js는 필요 없습니다.
+`SHA256SUMS already exists`는 같은 이름의 파일이 남아 있다는 뜻입니다. `--clobber`는 이번에 요청한 wheel과 체크섬 파일만 덮어씁니다. `--skip-existing`은 이전 체크섬을 재사용할 수 있으므로 사용하지 않습니다. 검증 실패 시 복사·설치를 진행하지 마세요.
+
+`/opt/netbox/plugin-wheels/`는 wheel 보관 폴더입니다. 복사만으로 설치되지는 않으며, 아래 가상환경 pip 설치 및 정적 파일 수집 절차까지 진행해야 합니다. 실제 NetBox 경로가 다르면 명령의 경로를 변경하세요.
+
+
+위 명령은 wheel을 `/opt/netbox/plugin-wheels/`까지 복사합니다. Docker는 `sudo install` 대상 경로를 기존 Dockerfile의 빌드 컨텍스트 안 `plugin-wheels/` 절대 경로로 바꾸세요. 운영 서버에 Node.js는 필요 없습니다.
 
 ## 3A. Linux 가상환경 / systemd
 

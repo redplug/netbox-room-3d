@@ -33,12 +33,33 @@ Location에 서버실 크기를 연결하고 기존 랙을 수동 배치하는 N
    비공개 저장소는 권한이 있는 GitHub 계정으로 로그인해야 합니다.
 
 ```sh
-# GitHub CLI를 사용하는 다운로드 예시 (브라우저로 받아도 됩니다)
-gh release download v0.1.4 --repo redplug/netbox-room-3d \
-  --pattern 'netbox_room_3d-0.1.4-py3-none-any.whl' --pattern SHA256SUMS
-# SHA256SUMS에는 wheel과 소스 압축파일의 체크섬이 있습니다.
-sha256sum --ignore-missing -c SHA256SUMS
+# 운영 Linux 호스트에서 실행합니다. 같은 버전의 재다운로드도 가능합니다.
+(
+  set -eu
+  mkdir -p ./room3d-downloads/v0.1.4
+  cd ./room3d-downloads/v0.1.4
+  gh release download v0.1.4 --repo redplug/netbox-room-3d \
+    --pattern 'netbox_room_3d-0.1.4-py3-none-any.whl' --pattern SHA256SUMS \
+    --clobber
+
+  # wheel이 실제로 있는지 확인하고 검증합니다.
+  # 함께 받지 않은 소스 압축파일의 체크섬은 건너뜁니다.
+  test -s netbox_room_3d-0.1.4-py3-none-any.whl
+  sha256sum --ignore-missing -c SHA256SUMS
+
+  # 검증 성공 시에만 운영용 플러그인 패키지 보관 폴더로 복사합니다.
+  sudo install -d -m 0755 /opt/netbox/plugin-wheels
+  sudo install -m 0644 netbox_room_3d-0.1.4-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.4-py3-none-any.whl
+  cmp netbox_room_3d-0.1.4-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.4-py3-none-any.whl
+)
 ```
+
+`SHA256SUMS already exists`는 같은 이름의 파일이 남아 있다는 뜻입니다. `--clobber`는 이번에 요청한 wheel과 체크섬 파일만 덮어씁니다. `--skip-existing`은 이전 체크섬을 재사용할 수 있으므로 사용하지 않습니다. 검증 실패 시 복사·설치를 진행하지 마세요.
+
+`/opt/netbox/plugin-wheels/`는 wheel 보관 폴더입니다. 복사만으로 설치되지는 않으며, 아래 가상환경 pip 설치 및 정적 파일 수집 절차까지 진행해야 합니다. 실제 NetBox 경로가 다르면 명령의 경로를 변경하세요.
+
 
 wheel에는 3D 화면의 JS/CSS가 포함되어 **운영 서버에 Node.js나 npm이 필요하지 않습니다**.
 
