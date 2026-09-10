@@ -8,7 +8,8 @@
 #room3d h1 { font-size:23px; font-weight:650; letter-spacing:-.6px; display:flex; align-items:center; gap:12px; }
 #room3d h2 { font-size:14px; font-weight:650; }
 #room3d a { color:var(--r3-teal); text-decoration:none; font-size:12px; }
-#room3d .r3-app { background:#fff; border:1px solid var(--r3-border); min-width:800px; }
+#room3d .r3-app { background:#fff; border:1px solid var(--r3-border); min-width:0; display:flex; flex-direction:column; height:var(--r3-available-height, calc(100dvh - 120px)); min-height:0; }
+#room3d .r3-location-bar, #room3d .r3-footer, #room3d #r3-notice { flex-shrink:0; }
 #room3d .r3-eyebrow { display:block; font-size:9px; letter-spacing:1.7px; font-weight:700; color:var(--r3-muted); margin-bottom:3px; }
 #room3d .r3-tag { font-size:10px; font-weight:500; letter-spacing:0; background:#e9f4f2; color:#087f78; padding:3px 8px; border:1px solid #d0e8e3; border-radius:5px; white-space:nowrap; }
 #room3d .r3-location-actions { display:flex; gap:10px; align-items:center; justify-content:flex-end; flex-wrap:wrap; margin-left:auto; }
@@ -32,7 +33,8 @@
 #room3d label { display:block; color:#647786; font-size:11px; margin:10px 0; }
 #room3d label>input:not([type=checkbox]),#room3d label>select { margin-top:5px; }
 #room3d .r3-check { display:flex; align-items:center; gap:6px; font-size:11px; }
-#room3d .r3-workspace { display:grid; grid-template-columns:235px minmax(330px,1fr) 270px; height:calc(100vh - 162px); min-height:520px; max-height:1100px; }
+#room3d .r3-workspace { display:grid; grid-template-columns:235px minmax(0,1fr) 270px; flex:1; min-height:0; overflow:hidden; }
+#room3d .r3-stage, #room3d .r3-library, #room3d .r3-inspector { min-height:0; min-width:0; }
 #room3d .r3-library { padding:21px 16px; background:#fbfcfd; border-right:1px solid var(--r3-border); overflow:auto; }
 #room3d .r3-section-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 #r3-rack-count { font-size:11px; border-radius:5px; background:#e9eef2; color:#687988; padding:1px 7px; }
@@ -116,9 +118,12 @@
   #r3-room-summary { font-size:10px; }
   #room3d .r3-stage-footer { flex-direction:column; gap:3px; }
 }
-@media (max-width:850px) { #room3d .r3-app { min-width:0; } #room3d .r3-workspace { grid-template-columns:180px minmax(260px,1fr); } #room3d .r3-inspector { grid-column:1 / -1; max-height:400px; } #room3d .r3-workspace { height:auto; max-height:none; } #room3d .r3-stage { height:550px; } #room3d .r3-header { height:auto; padding:15px; gap:12px; flex-wrap:wrap; } #room3d .r3-location-bar { flex-wrap:wrap; } #room3d .r3-footer { gap:10px; flex-wrap:wrap; } }
+@media (max-width:850px) { #room3d .r3-workspace { grid-template-columns:160px minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,.5fr); } #room3d .r3-inspector { grid-column:1 / -1; } #room3d .r3-location-bar { flex-wrap:wrap; } #room3d .r3-footer { gap:10px; flex-wrap:wrap; } }
 
 #room3d .r3-location-bar > .r3-check { font-size:11px; letter-spacing:0; gap:6px; white-space:nowrap; }
 .r3-device-tooltip { position: absolute; z-index: 10; pointer-events: none; background: #172d3b; color: #fff; padding: 7px 10px; border-radius: 5px; font-size: 12px; max-width: 95%; overflow-wrap: anywhere; }
 .r3-focus-tag { color:#172d3b; background:#ffd34e; border:2px solid #fff; border-radius:5px; padding:5px 9px; font-weight:700; font-size:12px; box-shadow:0 2px 8px #0005; }
 #room3d .r3-result-ips { display:block; color:#0f766e; margin-top:5px; font-size:11px; overflow-wrap:anywhere; }
+#room3d .r3-label.rack-front { color:#fff; background:#087f78; border:1px solid #fff; font-size:10px; font-weight:700; padding:2px 5px; z-index:10000 !important; }
+#room3d .r3-label.rack-rear { color:#64748b; background:#f8fafccc; font-size:10px; padding:1px 4px; }
+#room3d #r3-room-summary { flex-shrink:0; }

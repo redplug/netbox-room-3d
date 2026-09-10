@@ -25,6 +25,20 @@ test('rear ports stay compact for one interface and wrap with primary metadata',
   }
   scene.clear();
 });
+test('top-view front arrow follows rack rotation and disappears outside top view', () => {
+  const { scene, layout, racks } = fixture();
+  for (const rotation of [0, 90, 180, 270]) {
+    layout.placements[0].rotation = rotation; scene.mode = 'top'; scene.update(layout, racks, null);
+    const markers = []; scene.content.traverse(o => { if (o.userData.frontMarker) markers.push(o); });
+    assert.equal(markers.length, layout.placements.length);
+    assert.equal(markers[0].parent.parent.rotation.y, -rotation * Math.PI / 180);
+    const vertices = markers[0].geometry.attributes.position;
+    assert.ok(vertices.getZ(2) > racks[0].depth / 2000);
+  }
+  scene.mode = '3d'; scene.update(layout, racks, null);
+  scene.content.traverse(o => assert.ok(!o.userData.frontMarker));
+  scene.clear();
+});
 test('single Primary IP shows on server; multiple IPs only show on their interface', () => {
   const deviceInfo = { primary_ips: ['192.0.2.1', '2001:db8::1'] };
   assert.deepEqual(hoverIPs({ deviceInfo }), []);
@@ -48,7 +62,7 @@ test('device top and bottom default to grey, with global assigned-color override
   for (const mode of ['3d', 'top']) for (const deviceColors of [false, true, false]) {
     scene.mode = mode; scene.update(layout, racks, null, { deviceColors });
     let count = 0;
-    scene.content.traverse(o => {
+    for (const node of scene.rackNodes.values()) node.details.traverse(o => {
       if (!o.userData.deviceInfo || !Array.isArray(o.material)) return;
       count++;
       const d = o.userData.deviceInfo;

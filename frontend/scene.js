@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { dimensions, deviceBottom, footprint, U } from './geometry.js';
+import { dimensions, footprint } from './geometry.js';
 
+import { buildRack, buildRoom } from './scene-builders.js';
+import { ResourcePool } from './resource-pool.js';
 import { objectTypes } from './objects.js';
-import { rackUsage, statusColor, usageColor } from './inventory.js';
 
 const m = n => n / 1000;
 export function hoverIPs(meta) {
@@ -13,6 +14,7 @@ export function hoverIPs(meta) {
 }
 export class RoomScene {
   constructor(host, handlers) {
+    this.listeners = [];
     this.host = host; this.handlers = handlers; this.textures = new Map(); this.mode = '3d';
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color('#e8edf0');
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -22,36 +24,68 @@ export class RoomScene {
     this.renderer.domElement.tabIndex = 0;
     host.appendChild(this.renderer.domElement);
     this.tooltip = document.createElement('div'); this.tooltip.className = 'r3-device-tooltip'; this.tooltip.hidden = true; this.tooltip.setAttribute('role', 'tooltip'); host.appendChild(this.tooltip);
-    this.renderer.domElement.addEventListener('pointerleave', () => { this.tooltip.hidden = true; });
+    this.on(this.renderer.domElement, 'pointerleave', () => { this.tooltip.hidden = true; });
     this.labels = new CSS2DRenderer(); Object.assign(this.labels.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none' }); host.appendChild(this.labels.domElement);
     this.camera = new THREE.PerspectiveCamera(42, 1, .01, 300);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.maxPolarAngle = Math.PI / 2 - .02; this.controls.minDistance = .6; this.controls.maxDistance = 100;
-    this.controls.addEventListener('change', () => this.draw());
+    this.on(this.controls, 'change', () => this.draw());
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x657582, 2.5));
     const sun = new THREE.DirectionalLight(0xffffff, 3); sun.position.set(5, 12, 7); this.scene.add(sun);
     this.content = new THREE.Group(); this.scene.add(this.content);
     this.ray = new THREE.Raycaster(); this.floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    this.renderer.domElement.addEventListener('pointerdown', e => this.down(e), { capture: true });
-    this.renderer.domElement.addEventListener('pointermove', e => this.move(e));
-    this.renderer.domElement.addEventListener('pointerup', e => this.up(e));
-    this.renderer.domElement.addEventListener('pointercancel', () => { this.drag = null; this.walkPointer = null; this.pointerStart = null; this.controls.enabled = this.mode !== 'walk'; });
-    this.renderer.domElement.addEventListener('dragover', e => e.preventDefault());
-    this.renderer.domElement.addEventListener('drop', e => { e.preventDefault(); if (this.mode === 'walk') return; const p = this.floorPoint(e); if (p) handlers.drop(Number(e.dataTransfer.getData('text/plain')), p.x * 1000, p.z * 1000); });
+    this.on(this.renderer.domElement, 'pointerdown', e => this.down(e), { capture: true });
+    this.on(this.renderer.domElement, 'pointermove', e => this.move(e));
+    this.on(this.renderer.domElement, 'pointerup', e => this.up(e));
+    this.on(this.renderer.domElement, 'pointercancel', () => this.cancelDrag());
+    this.on(this.renderer.domElement, 'dragover', e => e.preventDefault());
+    this.on(this.renderer.domElement, 'drop', e => { e.preventDefault(); if (this.mode === 'walk') return; const p = this.floorPoint(e); if (p) handlers.drop(Number(e.dataTransfer.getData('text/plain')), p.x * 1000, p.z * 1000); });
     this.observer = new ResizeObserver(() => this.resize()); this.observer.observe(host);
     this.keys = new Set();
     const canvas = this.renderer.domElement;
-    canvas.addEventListener('keydown', e => {
+    this.on(canvas, 'keydown', e => {
+      if (e.code === 'Escape' && this.drag) { this.cancelDrag(); return; }
       if (this.mode !== 'walk') return;
       if (e.code === 'Escape') { this.handlers.exitWalk(); return; }
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(e.code)) { e.preventDefault(); this.keys.add(e.code); }
     });
-    canvas.addEventListener('keyup', e => this.keys.delete(e.code));
-    const stop = () => { this.keys.clear(); this.walkPointer = null; this.pointerStart = null; };
-    canvas.addEventListener('blur', stop); window.addEventListener('blur', stop);
-    document.addEventListener('visibilitychange', stop);
-    canvas.addEventListener('lostpointercapture', () => { this.walkPointer = null; });
+    this.on(canvas, 'keyup', e => this.keys.delete(e.code));
+    const stop = () => { this.cancelDrag(); this.keys.clear(); this.walkPointer = null; this.pointerStart = null; };
+    this.on(canvas, 'blur', stop); this.on(window, 'blur', stop);
+    this.on(document, 'visibilitychange', stop);
+    this.on(canvas, 'lostpointercapture', () => this.cancelDrag());
     this.resize();
+  }
+  on(target, event, fn, options) {
+    target.addEventListener(event, fn, options); this.listeners.push(() => target.removeEventListener(event, fn, options));
+  }
+  dispose() {
+    if (this.disposed) return;
+    this.cancelDrag(); this.disposed = true;
+    for (const key of ['drawRAF', 'dragRAF', 'walkRAF', 'focusRAF']) if (this[key]) cancelAnimationFrame(this[key]);
+    for (const remove of this.listeners || []) remove();
+    this.observer?.disconnect(); this.controls?.dispose();
+    this.clear(); this.pool.clear(); this.renderer?.dispose();
+    this.renderer?.domElement.remove(); this.labels?.domElement.remove(); this.tooltip?.remove();
+  }
+  cancelDrag() {
+    if (this.dragRAF) cancelAnimationFrame(this.dragRAF);
+    this.dragRAF = null; this.pendingDrag = null;
+    const dragging = this.drag; this.drag = null;
+    this.walkPointer = null; this.pointerStart = null;
+    this.controls.enabled = this.mode !== 'walk';
+    if (dragging) this.handlers.dragCancel?.();
+  }
+  flushDrag() {
+    if (this.dragRAF) cancelAnimationFrame(this.dragRAF);
+    this.dragRAF = null;
+    const e = this.pendingDrag; this.pendingDrag = null;
+    if (!e || !this.drag) return;
+    const p = this.floorPoint(e);
+    if (p) {
+      const fn = this.drag.blockId ? this.handlers.dragBlock : this.handlers.drag;
+      fn(this.drag.blockId || this.drag.id, p.x * 1000 + this.drag.dx, p.z * 1000 + this.drag.dz);
+    }
   }
   walkFree(x, z) {
     const radius = .2, l = this.layout;
@@ -90,15 +124,27 @@ export class RoomScene {
     this.renderer.setSize(width, height); this.labels.setSize(width, height);
     this.camera.aspect = width / height; this.camera.updateProjectionMatrix(); this.draw();
   }
-  draw() { this.renderer.render(this.scene, this.camera); this.labels.render(this.scene, this.camera); }
+  draw() {
+    if (this.disposed || this.drawRAF) return;
+    this.drawRAF = requestAnimationFrame(() => { this.drawRAF = null; this.flushDraw(); });
+  }
+  flushDraw() {
+    if (this.disposed) return;
+    this.renderer.render(this.scene, this.camera); this.labels.render(this.scene, this.camera);
+  }
   point(e) {
+    // Input may arrive before the scheduled render after a camera/view change.
+    this.camera.updateMatrixWorld();
     const r = this.renderer.domElement.getBoundingClientRect();
     this.ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), this.camera);
   }
   floorPoint(e) { this.point(e); return this.ray.ray.intersectPlane(this.floor, new THREE.Vector3()); }
+  isVisible(object) { for (let o = object; o; o = o.parent) if (!o.visible) return false; return true; }
   hit(e) {
     this.point(e);
+    this.content.updateMatrixWorld(true);
     for (const hit of this.ray.intersectObjects(this.content.children, true)) {
+      if (!this.isVisible(hit.object)) continue;
       if (hit.object.userData.rackId || hit.object.userData.blockId) return hit.object.userData;
     }
     return null;
@@ -113,14 +159,15 @@ export class RoomScene {
       const p = this.floorPoint(e);
       if (!p) return;
       this.drag = { id: hit.rackId, blockId: hit.blockId, dx: placement.x - p.x * 1000, dz: placement.z - p.z * 1000 };
-      this.controls.enabled = false; e.stopImmediatePropagation(); this.renderer.domElement.setPointerCapture(e.pointerId);
+      this.handlers.dragStart?.(hit); this.controls.enabled = false; e.stopImmediatePropagation(); this.renderer.domElement.setPointerCapture(e.pointerId);
     }
   }
   move(e) {
     this.tooltip.hidden = true;
     if (!this.drag && !this.walkPointer && this.mode !== 'top') {
       this.point(e);
-      const hit = this.ray.intersectObjects(this.content.children, true).find(hit => hit.object.isMesh && !(hit.object.material.transparent && hit.object.material.opacity < .5));
+      this.content.updateMatrixWorld(true);
+      const hit = this.ray.intersectObjects(this.content.children, true).find(hit => this.isVisible(hit.object) && hit.object.isMesh && !(hit.object.material.transparent && hit.object.material.opacity < .5));
       if (hit?.object.userData.deviceInfo) {
         const info = hit.object.userData.deviceInfo;
         const ips = hoverIPs(hit.object.userData);
@@ -140,12 +187,14 @@ export class RoomScene {
       this.walkPointer = { x: e.clientX, y: e.clientY }; this.draw(); return;
     }
     if (!this.drag) return;
-    const p = this.floorPoint(e); if (p) { const fn = this.drag.blockId ? this.handlers.dragBlock : this.handlers.drag; fn(this.drag.blockId || this.drag.id, p.x * 1000 + this.drag.dx, p.z * 1000 + this.drag.dz); }
+    this.drag.moved = true;
+    this.pendingDrag = { clientX: e.clientX, clientY: e.clientY };
+    if (!this.dragRAF) this.dragRAF = requestAnimationFrame(() => this.flushDrag());
   }
   up(e) {
     this.walkPointer = null;
     const start = this.pointerStart;
-    if (this.drag) { this.drag = null; this.controls.enabled = true; this.handlers.dragEnd(); }
+    if (this.drag) { if (this.drag.moved) this.pendingDrag = { clientX: e.clientX, clientY: e.clientY }; this.flushDrag(); this.drag = null; this.controls.enabled = true; this.handlers.dragEnd(); }
     if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 5 && start.hit) { if (start.hit.blockId) this.handlers.selectBlock(start.hit.blockId); else this.handlers.select(start.hit.rackId, this.mode === 'top' ? null : start.hit.deviceId); }
     this.pointerStart = null;
   }
@@ -155,33 +204,41 @@ export class RoomScene {
   }
   label(text, x, y, z, parent, className = '') {
     const div = document.createElement('div'); div.className = `r3-label ${className}`; div.textContent = text;
-    const obj = new CSS2DObject(div); obj.position.set(x, y, z); parent.add(obj);
+    const obj = new CSS2DObject(div); div.style.pointerEvents = 'none'; obj.position.set(x, y, z); parent.add(obj); return obj;
   }
   texture(url, color, aspect) {
-    const key = `${url}|${color}|${aspect.toFixed(2)}`;
-    if (this.textures.has(key)) return this.textures.get(key);
-    const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = Math.max(32, Math.round(1024 / aspect));
-    const ctx = canvas.getContext('2d'); ctx.fillStyle = color; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
-    this.textures.set(key, texture);
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
-      ctx.drawImage(img, (canvas.width - img.width * scale) / 2, (canvas.height - img.height * scale) / 2, img.width * scale, img.height * scale);
-      texture.needsUpdate = true; this.draw();
-    };
-    img.onerror = () => this.handlers.imageError?.(); img.src = url;
-    return texture;
+    this.state();
+    const key = JSON.stringify(['image', url, color, aspect.toFixed(2)]);
+    return this.pool.acquire(key, () => {
+      const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = Math.max(32, Math.min(4096, Math.round(1024 / aspect)));
+      const ctx = canvas.getContext('2d'); ctx.fillStyle = color; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; texture.userData.poolKey = key;
+      const img = new Image(); img.crossOrigin = 'anonymous'; let disposed = false;
+      img.onload = () => {
+        if (disposed) return;
+        const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+        ctx.drawImage(img, (canvas.width - img.width * scale) / 2, (canvas.height - img.height * scale) / 2, img.width * scale, img.height * scale);
+        texture.needsUpdate = true; this.draw();
+      };
+      img.onerror = () => { if (!disposed) this.handlers.imageError?.(); }; img.src = url;
+      return { texture, dispose() { disposed = true; img.onload = img.onerror = null; texture.dispose(); } };
+    }).texture;
   }
   clear() {
-    if (this.focusRAF) cancelAnimationFrame(this.focusRAF);
+    this.state(); this.clearFocus();
     this.tooltip.hidden = true;
-    this.content.traverse(o => { if (o.userData.textPanel) o.material.map?.dispose(); });
-    this.content.traverse(o => { o.geometry?.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(v => v.dispose()); if (o.isCSS2DObject) o.element.remove(); });
-    this.content.clear();
+    for (const node of this.rackNodes.values()) node.group.add(node.details, node.top);
+    this.disposeGroup(this.content); this.content.clear();
+    this.rackNodes.clear(); this.blockNodes.clear(); this.environment = null; this.envKey = null;
+    this.selectionKey = undefined; this.selectionObjects = [];
+    this.pool.prune();
+  }
+  clearFocus() {
+    if (this.focusRAF) cancelAnimationFrame(this.focusRAF);
+    this.focusRAF = null; this.disposeGroup(this.focusGroup); this.focusGroup = null;
   }
   highlight(target) {
-    if (this.focusRAF) cancelAnimationFrame(this.focusRAF);
+    this.clearFocus();
     this.content.updateMatrixWorld(true);
     const box = new THREE.Box3();
     this.content.traverse(o => {
@@ -192,14 +249,14 @@ export class RoomScene {
     const shape = new THREE.BoxGeometry(size.x, size.y, size.z);
     const material = new THREE.LineBasicMaterial({ color: '#ffb000', transparent: true, depthTest: false });
     const outline = new THREE.LineSegments(new THREE.EdgesGeometry(shape), material);
-    outline.position.copy(center); outline.renderOrder = 1000; this.content.add(outline);
+    outline.position.copy(center); outline.renderOrder = 1000; this.focusGroup = new THREE.Group(); this.content.add(this.focusGroup); this.focusGroup.add(outline);
     const glowMaterial = new THREE.MeshBasicMaterial({ color: '#ffc400', transparent: true, opacity: .2, depthTest: false, depthWrite: false });
-    const glow = new THREE.Mesh(shape, glowMaterial); glow.raycast = () => {}; glow.position.copy(center); glow.renderOrder = 999; this.content.add(glow);
+    const glow = new THREE.Mesh(shape, glowMaterial); glow.raycast = () => {}; glow.position.copy(center); glow.renderOrder = 999; this.focusGroup.add(glow);
     const rack = this.racks.find(r => r.id === target.rackId);
     const device = rack?.devices.find(d => d.id === target.deviceId);
     const tag = document.createElement('div'); tag.className = 'r3-focus-tag'; tag.setAttribute('role', 'status');
     tag.textContent = `▼ ${device?.name || rack?.name} · 위치 강조`;
-    const label = new CSS2DObject(tag); label.position.set(center.x, box.max.y + .06, center.z); this.content.add(label);
+    const label = new CSS2DObject(tag); label.position.set(center.x, box.max.y + .06, center.z); this.focusGroup.add(label);
     const start = performance.now(), reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const frame = time => {
       const ongoing = time - start < 5000;
@@ -212,16 +269,21 @@ export class RoomScene {
     frame(start);
   }
   textPanel(text, width, height, x, y, z, parent, rear = false, meta = {}) {
-    const canvas = document.createElement('canvas'); canvas.width = meta.unitLabel ? 128 : 512; canvas.height = meta.interfaceId || meta.unitLabel ? canvas.width : 64;
-    const ctx = canvas.getContext('2d'); ctx.fillStyle = meta.statusColor || '#172d3b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#f1f5f9'; ctx.font = `bold ${meta.unitLabel ? 75 : meta.interfaceId ? 90 : 45}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - 12);
-    if (meta.interfaceId) {
-      ctx.strokeStyle = meta.isPrimary ? '#fbbf24' : '#82929f';
-      ctx.lineWidth = meta.isPrimary ? 18 : 8; ctx.strokeRect(10, 10, 492, 492);
-    }
-    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture }));
-    panel.position.set(x, y, z); panel.rotation.y = rear ? Math.PI : 0; panel.userData = { ...meta, textPanel: true }; parent.add(panel);
+    this.state();
+    const key = JSON.stringify(['text', text, !!meta.unitLabel, !!meta.interfaceId, meta.statusColor, !!meta.isPrimary]);
+    const resource = this.pool.acquire(key, () => {
+      const canvas = document.createElement('canvas'); canvas.width = meta.unitLabel || meta.interfaceId ? 128 : 512; canvas.height = meta.interfaceId || meta.unitLabel ? 128 : 64;
+      const ctx = canvas.getContext('2d'); ctx.fillStyle = meta.statusColor || '#172d3b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold ' + (meta.unitLabel ? 75 : meta.interfaceId ? 23 : 45) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - 12);
+      if (meta.interfaceId) {
+        ctx.strokeStyle = meta.isPrimary ? '#fbbf24' : '#82929f'; ctx.lineWidth = meta.isPrimary ? 4.5 : 2; ctx.strokeRect(2.5, 2.5, 123, 123);
+      }
+      const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+      const material = new THREE.MeshBasicMaterial({ map: texture });
+      return { material, dispose() { texture.dispose(); material.dispose(); } };
+    });
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height), resource.material);
+    panel.position.set(x, y, z); panel.rotation.y = rear ? Math.PI : 0; panel.userData = { ...meta, textPanel: true, textKey: key }; parent.add(panel);
   }
   roomObject(b, active, opts) {
     const type = b.type || 'pillar', preset = objectTypes[type] || objectTypes.pillar;
@@ -255,114 +317,131 @@ export class RoomScene {
     }
     if (active) box(w + .06, .008, d + .06, 0, .006, 0, '#2dd4bf', { transparent: true, opacity: .5 });
     if (opts.labels) this.label(b.name, 0, h + .12, 0, group, active ? 'active' : 'muted');
+    return group;
+  }
+  state() {
+    this.rackNodes ||= new Map(); this.blockNodes ||= new Map();
+    this.pool ||= new ResourcePool();
+  }
+  disposeGroup(group) {
+    if (!group) return;
+    if (group !== this.content) group.removeFromParent();
+    group.traverse(o => {
+      o.geometry?.dispose();
+      if (o.userData.textKey) this.pool.release(o.userData.textKey);
+      else if (o.material) for (const mat of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (mat.userData.imageKey) this.pool.release(mat.userData.imageKey);
+        mat.dispose();
+      }
+      if (o.isCSS2DObject) o.element.remove();
+    });
+  }
+  removeRack(node) {
+    node.group.add(node.details, node.top); this.disposeGroup(node.group);
+  }
+  syncMode() {
+    for (const node of this.rackNodes?.values() || []) {
+      const shown = this.mode === 'top' ? node.top : node.details;
+      const hidden = this.mode === 'top' ? node.details : node.top;
+      if (hidden.parent) {
+        hidden.traverse(o => { if (o.isCSS2DObject) o.element.remove(); });
+        hidden.removeFromParent();
+      }
+      if (!shown.parent) node.group.add(shown);
+    }
+  }
+  movePlacement(kind, id, placement) {
+    const node = (kind === 'block' ? this.blockNodes : this.rackNodes)?.get(id);
+    if (!node) return;
+    node.group.position.set(m(placement.x), 0, m(placement.z));
+    node.group.rotation.y = -(placement.rotation || 0) * Math.PI / 180;
+    this.draw();
+  }
+  setSelection(selected) {
+    const key = JSON.stringify(selected || null);
+    if (this.selectionKey === key) return;
+    for (const node of this.rackNodes.values()) {
+      for (const mesh of node.frameMeshes) mesh.material.color.set('#273847');
+      node.nameLabel?.element.classList.remove('active');
+    }
+    for (const group of this.selectionObjects || []) this.disposeGroup(group);
+    this.selectionObjects = []; this.selectionKey = key;
+    const node = this.rackNodes.get(selected?.rackId);
+    if (!node) return;
+    for (const mesh of node.frameMeshes) mesh.material.color.set('#0d9488');
+    node.nameLabel?.element.classList.add('active');
+    const p = this.layout.placements.find(p => p.rack_id === selected.rackId);
+    const dims = dimensions(this.racks.find(r => r.id === selected.rackId), p);
+    const marker = this.cube(m(dims.width) + .12, .012, m(dims.depth) + .12, 0, .008, 0, '#2dd4bf', node.group, { transparent: true, opacity: .45 });
+    this.selectionObjects.push(marker);
+    const device = node.devices.get(selected.deviceId);
+    if (device) {
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(device.geometry), new THREE.LineBasicMaterial({ color: '#fbbf24' }));
+      device.parent.add(edges); this.selectionObjects.push(edges);
+    }
   }
   update(layout, racks, selected, opts = {}) {
-    this.layout = layout; this.racks = racks;
-    this.walkObstacles = [...layout.blocks, ...layout.placements.flatMap(p => { const r = racks.find(r => r.id === p.rack_id); return r ? [{ ...p, ...dimensions(r, p) }] : []; })].map(footprint);
+    this.state(); this.clearFocus(); this.layout = layout; this.racks = racks; this.editable = opts.editable;
+    const byId = new Map(racks.map(r => [r.id, r]));
+    this.walkObstacles = [...layout.blocks, ...layout.placements.flatMap(p => {
+      const r = byId.get(p.rack_id); return r ? [{ ...p, ...dimensions(r, p) }] : [];
+    })].map(footprint);
     if (this.mode === 'walk') {
       const p = this.camera.position;
       if (!this.walkFree(p.x, p.z)) { const start = this.walkStart(); if (start) p.copy(start); else { this.handlers.exitWalk(); this.handlers.walkError(); return; } }
       p.y = Math.min(1.65, m(layout.height) - .1);
     }
-    this.editable = opts.editable; this.clear();
-    const w = m(layout.width), d = m(layout.depth), h = m(layout.height);
-    this.cube(w, .08, d, w / 2, -.06, d / 2, '#fafcfd');
-    if (opts.grid) {
-      const points = [], step = Math.max(.1, m(layout.grid));
-      for (let x = 0; x <= w; x += step) points.push(new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, 0, d));
-      for (let z = 0; z <= d; z += step) points.push(new THREE.Vector3(0, 0, z), new THREE.Vector3(w, 0, z));
-      const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: '#cbd5df', transparent: true, opacity: .65 })); this.content.add(lines);
+    const envKey = JSON.stringify([layout.width, layout.depth, layout.height, layout.grid, opts.grid, opts.walls]);
+    if (this.envKey !== envKey) {
+      this.disposeGroup(this.environment); this.environment = buildRoom.call(this, layout, opts); this.envKey = envKey;
     }
-    if (opts.walls) {
-      this.cube(w, h, .07, w / 2, h / 2, 0, '#cdd9df', this.content, { transparent: true, opacity: .24, depthWrite: false });
-      this.cube(.07, h, d, 0, h / 2, d / 2, '#cdd9df', this.content, { transparent: true, opacity: .24, depthWrite: false });
-    }
-    this.label(`${(w).toFixed(1)} m`, w / 2, .05, d + .4, this.content, 'dimension');
-    this.label(`${(d).toFixed(1)} m`, w + .45, .05, d / 2, this.content, 'dimension');
-    for (const b of layout.blocks) {
-      this.roomObject(b, selected?.blockId === b.id, opts);
-    }
-    for (const placement of layout.placements) {
-      const rack = racks.find(r => r.id === placement.rack_id); if (!rack) continue;
-      const dims = dimensions(rack, placement), rw = m(dims.width), rd = m(dims.depth), rh = m(dims.height);
-      const group = new THREE.Group(); group.position.set(m(placement.x), 0, m(placement.z)); group.rotation.y = -placement.rotation * Math.PI / 180; this.content.add(group);
-      const meta = { rackId: rack.id }, active = selected?.rackId === rack.id;
-      const usage = rackUsage(rack);
-      const baseColor = active ? '#0d9488' : '#273847';
-      this.cube(rw, .07, rd, 0, .035, 0, baseColor, group).userData = meta;
-      this.cube(rw, .07, rd, 0, rh - .035, 0, baseColor, group, { transparent: !!opts.transparent, opacity: opts.transparent ? .18 : 1, depthWrite: !opts.transparent }).userData = meta;
-      for (const x of [-rw / 2 + .025, rw / 2 - .025]) for (const z of [-rd / 2 + .025, rd / 2 - .025]) this.cube(.04, rh, .04, x, rh / 2, z, baseColor, group).userData = meta;
-      if (opts.sides) {
-        for (const x of [-rw / 2 + .012, rw / 2 - .012]) {
-          const panel = this.cube(.024, rh - .14, rd - .08, x, rh / 2, 0, baseColor, group);
-          panel.userData = { ...meta, sidePanel: true };
-        }
+    const liveRacks = new Set(), liveBlocks = new Set();
+    const visual = [opts.labels, opts.units, opts.usage, opts.sides, opts.transparent, opts.deviceColors, opts.statuses];
+    for (const p of layout.placements) {
+      const rack = byId.get(p.rack_id); if (!rack) continue;
+      liveRacks.add(rack.id);
+      const key = JSON.stringify([rack, dimensions(rack, p), p.locked, visual, rack.devices.map(d => layout.appearances[String(d.id)])]);
+      let node = this.rackNodes.get(rack.id);
+      if (node?.key !== key) {
+        if (node) this.removeRack(node);
+        node = buildRack.call(this, p, rack, layout, opts); node.key = key;
+        this.rackNodes.set(rack.id, node); this.selectionKey = undefined;
       }
-      const railW = Math.min(m(rack.rail_width || 482.6), rw - .08), base = (rh - m(rack.u_height * U)) / 2;
-      if (opts.usage) this.label(`${usage.used}/${rack.u_height}U · 잔여 ${usage.free}U · ${usage.count}대 · ${usage.percent}%`, 0, rh + .35, 0, group, 'usage');
-      if (opts.usage) this.cube(rw, .025, rd, 0, rh + .02, 0, usageColor(usage.percent), group).userData = meta;
-      if (opts.units) for (let i = 0; i < rack.u_height; i++) {
-        const number = rack.starting_unit + (rack.desc_units ? rack.u_height - i - 1 : i);
-        const y = base + m((i + .5) * U);
-        for (const rear of [false, true]) {
-          const z = (rear ? -1 : 1) * (rd / 2 + .003);
-          this.textPanel(String(number), .045, m(U) * .85, -rw / 2 - .025, y, z, group, rear, { ...meta, unitLabel: true });
-          if (!usage.occupied.has(i)) this.cube(railW, .002, .003, 0, y, z, '#94a3b8', group).userData = meta;
-        }
-      }
-      for (const x of [-railW / 2 - .012, railW / 2 + .012]) for (const z of [-rd / 2 + .065, rd / 2 - .065]) this.cube(.018, m(rack.u_height * U), .025, x, rh / 2, z, '#82929f', group).userData = meta;
-      if (opts.labels) this.label(`${rack.name}${placement.locked ? ' · 잠금' : ''}`, 0, rh + .18, 0, group, active ? 'active' : '');
-      this.textPanel('FRONT · 전면', rw * .85, .065, 0, rh - .035, rd / 2 + .002, group, false, meta);
-      this.textPanel('REAR · 후면', rw * .85, .065, 0, rh - .035, -rd / 2 - .002, group, true, meta);
-      if (active) {
-        const marker = this.cube(rw + .12, .012, rd + .12, 0, .008, 0, '#2dd4bf', group, { transparent: true, opacity: .45 }); marker.userData = meta;
-      }
-      for (const device of rack.devices) {
-        if (opts.statusFilter && device.status !== opts.statusFilter) continue;
-        const bottom = deviceBottom(rack, device); if (bottom == null) continue;
-        const style = layout.appearances[String(device.id)] || {}, color = style.color || device.color || '#64748b';
-        const dh = m(device.u_height * U) - .003, dd = Math.min(m(style.depth || (device.full_depth ? dims.depth - 140 : dims.depth * .42)), rd - .12);
-        const rear = device.face === 'rear', z = rear ? -rd / 2 + .065 + dd / 2 : rd / 2 - .065 - dd / 2;
-        const deviceGroup = new THREE.Group(); deviceGroup.position.set(0, base + m(bottom) + dh / 2, z); deviceGroup.rotation.y = rear ? Math.PI : 0; group.add(deviceGroup);
-        const deviceMeta = { ...meta, deviceId: device.id, deviceInfo: device };
-        const mesh = this.cube(railW, dh, dd, 0, 0, 0, color, deviceGroup); mesh.userData = deviceMeta;
-        {
-          const mats = Array.from({ length: 6 }, (_, index) => new THREE.MeshStandardMaterial({ color: (index === 2 || index === 3) && !opts.deviceColors ? '#808890' : color, roughness: .8 }));
-          for (const [face, index] of [['front', 4], ['rear', 5]]) {
-            const override = device.images.find(i => i.id === style[`${face}_image_id`]);
-            const url = override?.url || device[`${face}_image`];
-            if (url) { mats[index].color.set('#ffffff'); mats[index].map = this.texture(url, color, railW / dh); }
-          }
-          mesh.material.dispose(); mesh.material = mats;
-          if (opts.statuses) for (const rearFace of [false, true]) this.textPanel(device.status_label || device.status, railW * .35, Math.min(dh * .3, .025), railW * .3, -dh * .3, (rearFace ? -1 : 1) * (dd / 2 + .004), deviceGroup, rearFace, { ...deviceMeta, statusColor: statusColor(device.status) });
-          const nameHeight = Math.min(dh * .65, .04);
-          this.textPanel(device.name, railW * .94, nameHeight, 0, (dh - nameHeight) / 2 - .001, dd / 2 + .001, deviceGroup, false, deviceMeta);
-          const ports = device.interfaces || [];
-          const columns = 8, rows = Math.ceil(ports.length / columns);
-          const size = Math.min(m(U) / 2, dh * .85 / Math.max(1, rows) * .8, railW * .94 / columns * .8);
-          const pitchX = size * 1.25, pitchY = size * 1.25;
-          ports.forEach((port, i) => this.textPanel(port.name, size, size,
-            railW * .47 - ((i % columns) + .5) * pitchX, dh * .425 - (Math.floor(i / columns) + .5) * pitchY,
-            -dd / 2 - .002, deviceGroup, true, { ...deviceMeta, rearInfo: device, interfaceId: port.id, interfaceName: port.name, interfaceIPs: port.primary_ips || [], isPrimary: !!port.is_primary }));
-          if (selected?.deviceId === device.id) { const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#fbbf24' })); deviceGroup.add(edges); }
-        }
+      this.movePlacement('rack', rack.id, p);
+      for (const mesh of node.devices.values()) {
+        mesh.parent.visible = !opts.statusFilter || mesh.userData.deviceInfo.status === opts.statusFilter;
       }
     }
-    this.draw();
+    for (const [id, node] of this.rackNodes) if (!liveRacks.has(id)) { this.removeRack(node); this.rackNodes.delete(id); this.selectionKey = undefined; }
+    for (const block of layout.blocks) {
+      liveBlocks.add(block.id);
+      const { x, z, rotation, ...shape } = block;
+      const key = JSON.stringify([shape, opts.labels, selected?.blockId === block.id]);
+      let node = this.blockNodes.get(block.id);
+      if (node?.key !== key) {
+        this.disposeGroup(node?.group);
+        node = { group: this.roomObject(block, selected?.blockId === block.id, opts), key };
+        this.blockNodes.set(block.id, node);
+      }
+      this.movePlacement('block', block.id, block);
+    }
+    for (const [id, node] of this.blockNodes) if (!liveBlocks.has(id)) { this.disposeGroup(node.group); this.blockNodes.delete(id); }
+    this.setSelection(selected); this.syncMode(); this.pool.prune(); this.draw();
   }
   view(mode, selected) {
+    this.clearFocus();
     cancelAnimationFrame(this.walkRAF); this.walkTime = null; this.keys.clear(); this.walkPointer = null;
     if (mode === 'walk') {
       const start = this.walkStart();
       if (!start) { this.handlers.walkError(); return; }
-      this.mode = 'walk'; this.controls.enabled = false;
+      this.mode = 'walk'; this.syncMode(); this.controls.enabled = false;
       this.camera.position.copy(start); this.yaw = 0; this.pitch = 0;
       this.camera.rotation.set(0, 0, 0, 'YXZ');
       this.renderer.domElement.focus(); this.draw();
       this.walkRAF = requestAnimationFrame(t => this.walkFrame(t)); return;
     }
     this.controls.enabled = true;
-    this.mode = mode === 'top' ? 'top' : '3d'; this.controls.enableRotate = mode !== 'top';
+    this.mode = mode === 'top' ? 'top' : '3d'; this.syncMode(); this.controls.enableRotate = mode !== 'top';
     const l = this.layout; if (!l) return;
     const center = new THREE.Vector3(m(l.width) / 2, 0, m(l.depth) / 2), span = Math.max(m(l.width), m(l.depth));
     if ((mode === 'front' || mode === 'rear') && selected) {
@@ -375,6 +454,8 @@ export class RoomScene {
       }
     } else if (mode === 'top') this.camera.position.set(center.x, span * 1.5, center.z + .001);
     else this.camera.position.set(center.x + span * .8, span * .8, center.z + span * .85);
-    this.controls.target.copy(center); this.controls.update(); this.draw();
+    this.controls.target.copy(center); this.controls.update();
+    this.camera.updateMatrixWorld(); this.scene.updateMatrixWorld(true);
+    this.labels.render(this.scene, this.camera); this.draw();
   }
 }

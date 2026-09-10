@@ -1,0 +1,43 @@
+{
+  "measurement": "JavaScript scene preparation; GPU rendering excluded",
+  "racks": 24,
+  "devices": 480,
+  "interfaces": 1920,
+  "initialMs": 302.1000000014901,
+  "switching": {
+    "medianMs": 400.1000000014901,
+    "maxMs": 412.79999999701977,
+    "samplesMs": [
+      376.29999999701977,
+      412.79999999701977,
+      400.1000000014901,
+      406.30000000447035,
+      302.19999999552965,
+      400.1000000014901
+    ],
+    "clears": 6,
+    "textPanelsCreated": 32544
+  },
+  "dragging": {
+    "medianMs": 402.3999999985099,
+    "maxMs": 514.3999999985099,
+    "samplesMs": [
+      365.29999999701977,
+      372.20000000298023,
+      395.6000000014901,
+      402.3999999985099,
+      409.1000000014901,
+      407.3999999985099,
+      294.3999999985099,
+      514.3999999985099,
+      403.5,
+      416.3999999985099,
+      402.30000000447035,
+      390.3999999985099
+    ],
+    "clears": 12,
+    "textPanelsCreated": 65088
+  },
+  "diagnostics": null,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+}

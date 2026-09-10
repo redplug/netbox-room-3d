@@ -27,6 +27,19 @@ root.innerHTML = `
   </div>
   <dialog id="r3-room-dialog"><form id="r3-room-form"><div class="r3-dialog-title"><h2>서버실 기본 설정</h2><button type="button" class="r3-icon-button" data-action="close-room" aria-label="닫기">×</button></div><p>선택한 Location에 공간을 연결합니다. 모든 치수는 mm입니다.</p><label>서버실 이름<input name="name" required maxlength="100"></label><div class="r3-form-grid"><label>가로 (mm)<input type="number" name="width" min="500" max="100000" required></label><label>세로 (mm)<input type="number" name="depth" min="500" max="100000" required></label><label>높이 (mm)<input type="number" name="height" min="500" max="100000" required></label><label>격자 크기 (mm)<input type="number" name="grid" min="100" max="5000" required></label></div><label class="r3-check"><input name="include_descendants" type="checkbox"> 하위 Location의 랙 포함</label><p class="r3-help">공간을 줄이면 기존 배치가 경계를 벗어날 수 있습니다.</p><div class="r3-dialog-actions"><button type="button" data-action="close-room" class="r3-btn">닫기</button><button type="submit" class="r3-btn primary">설정 적용</button></div></form></dialog>`;
 const $ = selector => root.querySelector(selector);
+function fitViewport() {
+  const top = Math.max(0, root.getBoundingClientRect().top);
+  const height = Math.max(240, (window.visualViewport?.height || window.innerHeight) - top - 12);
+  const value = `${Math.floor(height)}px`;
+  if (root.style.getPropertyValue('--r3-available-height') !== value) root.style.setProperty('--r3-available-height', value);
+}
+fitViewport();
+window.addEventListener('resize', fitViewport);
+window.visualViewport?.addEventListener('resize', fitViewport);
+document.addEventListener('fullscreenchange', fitViewport);
+const viewportObserver = new ResizeObserver(fitViewport);
+viewportObserver.observe(root.parentElement);
+document.fonts?.ready.then(fitViewport);
 function notice(message = '', error = false) { const el = $('#r3-notice'); el.textContent = message; el.hidden = !message; el.className = error ? 'error' : ''; }
 function remember() { undo.push({ layout: clone(layout), racks: data.racks }); if (undo.length > 30) undo.shift(); }
 function changed(keepInspector = false) { dirty = JSON.stringify(layout) !== JSON.stringify(baseline); render(keepInspector); }
@@ -45,7 +58,7 @@ function renderLocations() {
   $('#r3-location').disabled = busy || !visible.length;
   $('#r3-only-rack-locations').disabled = busy;
 }
-function render(keepInspector = false) {
+function render(keepInspector = false, syncScene = true) {
   if (!data || !layout) return;
   const problems = errors(layout, data.racks);
   $('#r3-save-state').textContent = !data.can_edit ? '읽기 전용' : busy ? '처리 중…' : dirty ? '저장하지 않은 변경' : `저장됨 · v${layout.revision}`;
@@ -76,7 +89,7 @@ function render(keepInspector = false) {
   root.querySelectorAll('[data-action=view]').forEach(b => b.classList.toggle('active', b.dataset.view === mode));
   if (!keepInspector) inspector();
   root.querySelectorAll('select').forEach(el => el.classList.add('no-ts'));
-  scene?.update(layout, data.racks, selected, { ...opts, editable: canEdit() });
+  if (syncScene) scene?.update(layout, data.racks, selected, { ...opts, editable: canEdit() });
 }
 function inspector() {
   const panel = $('#r3-inspector');
@@ -116,24 +129,25 @@ async function load(id) {
     busy = false; render(); scene?.view(mode, selected);
   } catch (error) { if (generation !== loadGeneration) return; busy = false; $('#r3-location').disabled = false; notice(error.message, true); if (locationId) $('#r3-location').value = String(locationId); render(); }
 }
-function place(id, x = layout.width / 2, z = layout.depth / 2) {
+function place(id, x = layout.width / 2, z = layout.depth / 2, renderAfter = true) {
   if (!canEdit() || !data.racks.some(r => r.id === id) || layout.placements.some(p => p.rack_id === id)) return;
   remember(); layout.placements.push({ rack_id: id, x: snap(x, layout.grid, opts.snap), z: snap(z, layout.grid, opts.snap), rotation: 0, locked: false, dimensions: {} });
-  selected = { rackId: id }; changed(); notice('랙을 배치했습니다. 평면 모드에서 위치를 조정한 뒤 저장하세요.');
+  selected = { rackId: id }; if (renderAfter) changed(); notice('랙을 배치했습니다. 평면 모드에서 위치를 조정한 뒤 저장하세요.');
 }
 root.addEventListener('dragstart', e => { const card = e.target.closest('[data-rack]'); if (card) { e.dataTransfer.setData('text/plain', card.dataset.rack); e.dataTransfer.effectAllowed = 'copy'; } });
 root.addEventListener('click', async e => {
   const button = e.target.closest('[data-action]'); if (!button || button.disabled || !layout) return;
   const action = button.dataset.action, id = Number(button.dataset.id);
+  if (action === 'find-device' || scene.drag) return;
   try {
-    if (action === 'select') { selected = { rackId: id }; render(); }
-    else if (action === 'select-block') { selected = { blockId: button.dataset.id }; render(); }
-    else if (action === 'device') { selected.deviceId = id; render(); }
-    else if (action === 'place') place(id);
-    else if (action === 'view') { mode = button.dataset.view; scene.view(mode, selected); mode = scene.mode; render(); }
+    if (action === 'select') { selected = { rackId: id }; }
+    else if (action === 'select-block') { selected = { blockId: button.dataset.id }; }
+    else if (action === 'device') { selected.deviceId = id; }
+    else if (action === 'place') place(id, undefined, undefined, false);
+    else if (action === 'view') { mode = button.dataset.view; scene.view(mode, selected); mode = scene.mode; }
     else if (action === 'fit') scene.view(mode, selected);
-    else if (action === 'front' || action === 'rear') { mode = '3d'; scene.view(action, selected); render(); }
-    else if (action === 'save' && canEdit()) {
+    else if (action === 'front' || action === 'rear') { mode = '3d'; scene.view(action, selected); }
+    else if (action === 'save' && canEdit() && !errors(layout, data.racks).length) {
       setBusy(true); const result = await api.save(locationId, layout); data = result; layout = clone(result.layout); baseline = clone(layout); baselineRacks = data.racks; dirty = false; undo = []; notice('배치를 저장했습니다.');
     } else if (action === 'cancel') { layout = clone(baseline); data.racks = baselineRacks; dirty = false; undo = []; notice('저장 전 변경을 취소했습니다.'); }
     else if (action === 'reload') { if (!dirty || window.confirm('저장하지 않은 변경을 버리고 다시 불러올까요?')) await load(locationId); }
@@ -152,20 +166,19 @@ root.addEventListener('click', async e => {
         }
       }
       if (!found) { block.x = layout.width / 2; block.z = layout.depth / 2; notice('빈 공간이 부족합니다. 좌표와 크기를 조정한 뒤 저장하세요.', true); }
-      remember(); layout.blocks.push(block); selected = { blockId: id }; changed(); }
-    else if (action === 'remove-block' && canEdit()) { remember(); layout.blocks = layout.blocks.filter(b => b.id !== selected.blockId); selected = null; changed(); }
-    else if (action === 'reset-appearance' && canEdit()) { remember(); delete layout.appearances[String(selected.deviceId)]; changed(); }
+      remember(); layout.blocks.push(block); selected = { blockId: id }; }
+    else if (action === 'remove-block' && canEdit()) { remember(); layout.blocks = layout.blocks.filter(b => b.id !== selected.blockId); selected = null; }
+    else if (action === 'reset-appearance' && canEdit()) { remember(); delete layout.appearances[String(selected.deviceId)]; }
   } catch (error) { notice(error.message, true); }
-  finally { busy = false; if (layout) { dirty = JSON.stringify(layout) !== JSON.stringify(baseline); render(); if (['select', 'device'].includes(action) && selected && layout.placements.some(p => p.rack_id === selected.rackId)) { if (filter.trim()) { mode = '3d'; scene.view('front', selected); render(); } scene.highlight(selected); } } }
+  finally { busy = false; if (layout) { dirty = JSON.stringify(layout) !== JSON.stringify(baseline); render(false, !['view', 'fit', 'front', 'rear', 'room', 'close-room'].includes(action)); if (['select', 'device'].includes(action) && selected && layout.placements.some(p => p.rack_id === selected.rackId)) { if (filter.trim()) { mode = '3d'; scene.view('front', selected); render(false, false); } scene.highlight(selected); } } }
 });
 root.addEventListener('click', e => {
   const button = e.target.closest('[data-action=find-device]'); if (!button || !layout) return;
   selected = { rackId: Number(button.dataset.rackId), deviceId: Number(button.dataset.id) };
-  render();
   if (layout.placements.some(p => p.rack_id === selected.rackId)) { mode = '3d'; scene.view('front', selected); render(); scene.highlight(selected); }
-  else notice('미배치 랙의 장비입니다. 랙을 배치하면 3D 위치로 이동할 수 있습니다.');
+  else { render(); notice('미배치 랙의 장비입니다. 랙을 배치하면 3D 위치로 이동할 수 있습니다.'); }
 });
-root.addEventListener('input', e => { if (e.target.id === 'r3-search') { filter = e.target.value; render(); } });
+root.addEventListener('input', e => { if (e.target.id === 'r3-search') { filter = e.target.value; scene.clearFocus(); render(false, false); } });
 root.addEventListener('change', async e => {
   const el = e.target;
   if (el.id === 'r3-status-filter') { opts.statusFilter = el.value; render(); return; }
@@ -211,19 +224,21 @@ async function start() {
       exitWalk: () => { mode = '3d'; scene.view(mode, selected); render(); },
       walkError: () => notice('걸어 다닐 빈 공간이 없습니다. 서버실 배치를 확인하세요.', true),
       selectBlock: blockId => { selected = { blockId }; render(); },
+      dragStart: hit => { selected = hit.blockId ? { blockId: hit.blockId } : { rackId: hit.rackId }; render(); $('[data-action=save]').disabled = true; },
       dragBlock: (id, x, z) => {
         if (!canEdit()) return;
         const b = layout.blocks.find(b => b.id === id); if (!b) return;
         dragBefore ||= { layout: clone(layout), racks: data.racks };
-        b.x = snap(x, layout.grid, opts.snap); b.z = snap(z, layout.grid, opts.snap); selected = { blockId: id }; changed();
+        b.x = snap(x, layout.grid, opts.snap); b.z = snap(z, layout.grid, opts.snap); selected = { blockId: id }; dirty = true; scene.movePlacement('block', id, b);
       },
       select: (rackId, deviceId) => { selected = { rackId, deviceId }; render(); }, drop: place,
       drag: (id, x, z) => {
         if (!canEdit()) return;
         const p = layout.placements.find(p => p.rack_id === id); if (p.locked) return;
-        dragBefore ||= { layout: clone(layout), racks: data.racks }; p.x = snap(x, layout.grid, opts.snap); p.z = snap(z, layout.grid, opts.snap); selected = { rackId: id }; changed();
+        dragBefore ||= { layout: clone(layout), racks: data.racks }; p.x = snap(x, layout.grid, opts.snap); p.z = snap(z, layout.grid, opts.snap); selected = { rackId: id }; dirty = true; scene.movePlacement('rack', id, p);
       },
-      dragEnd: () => { if (dragBefore) { undo.push(dragBefore); dragBefore = null; render(); } },
+      dragEnd: () => { if (dragBefore) { if (JSON.stringify(layout) !== JSON.stringify(dragBefore.layout)) { undo.push(dragBefore); if (undo.length > 30) undo.shift(); } dragBefore = null; } changed(); },
+      dragCancel: () => { if (dragBefore) { layout = dragBefore.layout; dragBefore = null; } changed(); },
       imageError: () => notice('일부 이미지를 불러오지 못해 해당 면을 장비 색상으로 표시합니다.', true),
     });
     locations = await api.list(); renderLocations();

@@ -1,5 +1,36 @@
 import { test, expect } from '@playwright/test';
 
+test('top view shows rack front and rear markers even with names hidden', async ({ page }) => {
+  await page.goto('http://127.0.0.1:5173');
+  await page.getByRole('button', { name: '평면 배치', exact: true }).click();
+  await expect(page.locator('.rack-front')).toHaveCount(4);
+  await page.locator('#r3-labels').uncheck();
+  await expect(page.locator('.rack-front').first()).toBeVisible();
+  await page.getByRole('combobox', { name: '방향', exact: true }).selectOption('90');
+  await expect(page.locator('.rack-rear')).toHaveCount(4);
+  await page.screenshot({ path: 'artifacts/top-front-markers.png' });
+  await page.getByRole('button', { name: '3D 보기', exact: true }).click();
+  await expect(page.locator('.rack-front')).toHaveCount(0);
+});
+
+test('NetBox viewport keeps all footer controls visible without page scrolling', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:18080/plugins/room-3d/');
+  await page.getByRole('textbox', { name: 'Username', exact: true }).fill('room3d-demo');
+  await page.getByRole('textbox', { name: 'Password', exact: true }).fill('room3d-local-demo');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  await expect(page.locator('#r3-canvas canvas')).toBeVisible();
+  for (const [width, height] of [[1440, 900], [1200, 700], [1920, 1080]]) {
+    await page.setViewportSize({ width, height });
+    await expect.poll(() => page.locator('.r3-footer').evaluate(el => el.getBoundingClientRect().bottom)).toBeLessThanOrEqual(height);
+    const controls = await page.locator('.r3-footer input').evaluateAll(els => els.map(el => el.getBoundingClientRect().bottom));
+    expect(controls.every(bottom => bottom <= height)).toBe(true);
+    const box = await page.locator('#r3-canvas').boundingBox(); expect(box.height).toBeGreaterThan(100);
+    await page.screenshot({ path: `artifacts/viewport-${width}-${height}.png` });
+  }
+  expect(errors).toEqual([]);
+});
+
 test('partial IP results show matching IPs and pulse both server and rack selection', async ({ page }) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('http://127.0.0.1:5173');
