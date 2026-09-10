@@ -4,6 +4,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { dimensions, deviceBottom, footprint, U } from './geometry.js';
 
 import { objectTypes } from './objects.js';
+import { rackUsage, statusColor, usageColor } from './inventory.js';
 
 const m = n => n / 1000;
 export function hoverIPs(meta) {
@@ -173,15 +174,47 @@ export class RoomScene {
     return texture;
   }
   clear() {
+    if (this.focusRAF) cancelAnimationFrame(this.focusRAF);
     this.tooltip.hidden = true;
     this.content.traverse(o => { if (o.userData.textPanel) o.material.map?.dispose(); });
     this.content.traverse(o => { o.geometry?.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(v => v.dispose()); if (o.isCSS2DObject) o.element.remove(); });
     this.content.clear();
   }
+  highlight(target) {
+    if (this.focusRAF) cancelAnimationFrame(this.focusRAF);
+    this.content.updateMatrixWorld(true);
+    const box = new THREE.Box3();
+    this.content.traverse(o => {
+      if (o.isMesh && o.userData.rackId === target.rackId && (!target.deviceId || o.userData.deviceId === target.deviceId)) box.expandByObject(o);
+    });
+    if (box.isEmpty()) { if (target.deviceId) this.highlight({ rackId: target.rackId }); return; }
+    const size = box.getSize(new THREE.Vector3()).addScalar(.025), center = box.getCenter(new THREE.Vector3());
+    const shape = new THREE.BoxGeometry(size.x, size.y, size.z);
+    const material = new THREE.LineBasicMaterial({ color: '#ffb000', transparent: true, depthTest: false });
+    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(shape), material);
+    outline.position.copy(center); outline.renderOrder = 1000; this.content.add(outline);
+    const glowMaterial = new THREE.MeshBasicMaterial({ color: '#ffc400', transparent: true, opacity: .2, depthTest: false, depthWrite: false });
+    const glow = new THREE.Mesh(shape, glowMaterial); glow.raycast = () => {}; glow.position.copy(center); glow.renderOrder = 999; this.content.add(glow);
+    const rack = this.racks.find(r => r.id === target.rackId);
+    const device = rack?.devices.find(d => d.id === target.deviceId);
+    const tag = document.createElement('div'); tag.className = 'r3-focus-tag'; tag.setAttribute('role', 'status');
+    tag.textContent = `▼ ${device?.name || rack?.name} · 위치 강조`;
+    const label = new CSS2DObject(tag); label.position.set(center.x, box.max.y + .06, center.z); this.content.add(label);
+    const start = performance.now(), reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const frame = time => {
+      const ongoing = time - start < 5000;
+      const intensity = ongoing && !reduced ? .55 + .45 * Math.cos((time - start) / 1200 * Math.PI * 2) : .8;
+      material.opacity = intensity; glowMaterial.opacity = .08 + intensity * .22; tag.style.opacity = String(.65 + intensity * .35);
+      this.draw();
+      if (ongoing && !reduced) this.focusRAF = requestAnimationFrame(frame);
+      else this.focusRAF = null;
+    };
+    frame(start);
+  }
   textPanel(text, width, height, x, y, z, parent, rear = false, meta = {}) {
-    const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = meta.interfaceId ? 512 : 64;
-    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#172d3b'; ctx.fillRect(0, 0, 512, canvas.height);
-    ctx.fillStyle = '#f1f5f9'; ctx.font = `bold ${meta.interfaceId ? 90 : 45}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 256, canvas.height / 2, 470);
+    const canvas = document.createElement('canvas'); canvas.width = meta.unitLabel ? 128 : 512; canvas.height = meta.interfaceId || meta.unitLabel ? canvas.width : 64;
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = meta.statusColor || '#172d3b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#f1f5f9'; ctx.font = `bold ${meta.unitLabel ? 75 : meta.interfaceId ? 90 : 45}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - 12);
     if (meta.interfaceId) {
       ctx.strokeStyle = meta.isPrimary ? '#fbbf24' : '#82929f';
       ctx.lineWidth = meta.isPrimary ? 18 : 8; ctx.strokeRect(10, 10, 492, 492);
@@ -254,6 +287,7 @@ export class RoomScene {
       const dims = dimensions(rack, placement), rw = m(dims.width), rd = m(dims.depth), rh = m(dims.height);
       const group = new THREE.Group(); group.position.set(m(placement.x), 0, m(placement.z)); group.rotation.y = -placement.rotation * Math.PI / 180; this.content.add(group);
       const meta = { rackId: rack.id }, active = selected?.rackId === rack.id;
+      const usage = rackUsage(rack);
       const baseColor = active ? '#0d9488' : '#273847';
       this.cube(rw, .07, rd, 0, .035, 0, baseColor, group).userData = meta;
       this.cube(rw, .07, rd, 0, rh - .035, 0, baseColor, group, { transparent: !!opts.transparent, opacity: opts.transparent ? .18 : 1, depthWrite: !opts.transparent }).userData = meta;
@@ -265,6 +299,17 @@ export class RoomScene {
         }
       }
       const railW = Math.min(m(rack.rail_width || 482.6), rw - .08), base = (rh - m(rack.u_height * U)) / 2;
+      if (opts.usage) this.label(`${usage.used}/${rack.u_height}U · 잔여 ${usage.free}U · ${usage.count}대 · ${usage.percent}%`, 0, rh + .35, 0, group, 'usage');
+      if (opts.usage) this.cube(rw, .025, rd, 0, rh + .02, 0, usageColor(usage.percent), group).userData = meta;
+      if (opts.units) for (let i = 0; i < rack.u_height; i++) {
+        const number = rack.starting_unit + (rack.desc_units ? rack.u_height - i - 1 : i);
+        const y = base + m((i + .5) * U);
+        for (const rear of [false, true]) {
+          const z = (rear ? -1 : 1) * (rd / 2 + .003);
+          this.textPanel(String(number), .045, m(U) * .85, -rw / 2 - .025, y, z, group, rear, { ...meta, unitLabel: true });
+          if (!usage.occupied.has(i)) this.cube(railW, .002, .003, 0, y, z, '#94a3b8', group).userData = meta;
+        }
+      }
       for (const x of [-railW / 2 - .012, railW / 2 + .012]) for (const z of [-rd / 2 + .065, rd / 2 - .065]) this.cube(.018, m(rack.u_height * U), .025, x, rh / 2, z, '#82929f', group).userData = meta;
       if (opts.labels) this.label(`${rack.name}${placement.locked ? ' · 잠금' : ''}`, 0, rh + .18, 0, group, active ? 'active' : '');
       this.textPanel('FRONT · 전면', rw * .85, .065, 0, rh - .035, rd / 2 + .002, group, false, meta);
@@ -273,6 +318,7 @@ export class RoomScene {
         const marker = this.cube(rw + .12, .012, rd + .12, 0, .008, 0, '#2dd4bf', group, { transparent: true, opacity: .45 }); marker.userData = meta;
       }
       for (const device of rack.devices) {
+        if (opts.statusFilter && device.status !== opts.statusFilter) continue;
         const bottom = deviceBottom(rack, device); if (bottom == null) continue;
         const style = layout.appearances[String(device.id)] || {}, color = style.color || device.color || '#64748b';
         const dh = m(device.u_height * U) - .003, dd = Math.min(m(style.depth || (device.full_depth ? dims.depth - 140 : dims.depth * .42)), rd - .12);
@@ -288,6 +334,7 @@ export class RoomScene {
             if (url) { mats[index].color.set('#ffffff'); mats[index].map = this.texture(url, color, railW / dh); }
           }
           mesh.material.dispose(); mesh.material = mats;
+          if (opts.statuses) for (const rearFace of [false, true]) this.textPanel(device.status_label || device.status, railW * .35, Math.min(dh * .3, .025), railW * .3, -dh * .3, (rearFace ? -1 : 1) * (dd / 2 + .004), deviceGroup, rearFace, { ...deviceMeta, statusColor: statusColor(device.status) });
           const nameHeight = Math.min(dh * .65, .04);
           this.textPanel(device.name, railW * .94, nameHeight, 0, (dh - nameHeight) / 2 - .001, dd / 2 + .001, deviceGroup, false, deviceMeta);
           const ports = device.interfaces || [];

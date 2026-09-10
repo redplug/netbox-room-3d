@@ -1,14 +1,25 @@
 # NetBox Room 3D
 
+## 검색·상태·U 사용 현황
+
+IP 부분 검색 결과에는 일치 IP를 서버명·랙명 아래 별도로 표시합니다. 서버명 검색에서는 조회 가능한 IP 목록을 표시합니다. 배치된 검색 결과를 선택하면 노란 강조와 위치 표지가 약 5초간 맥동한 뒤 고정됩니다. 다른 선택·검색·화면 변경 시 해제됩니다. 동작 줄이기 설정에서는 점멸 없이 표시합니다. 0U 등 3D로 표시되지 않는 장비는 소속 랙을 강조합니다.
+
+- 현재 Location의 랙·서버명·Primary IP 및 인터페이스에 직접 할당된 IP를 검색합니다. 검색 결과를 클릭하면 배치된 장비의 전면으로 이동하고 강조합니다. 미배치 랙은 상세만 표시합니다.
+- 장비 상태 필터는 목록과 3D 장비에 함께 적용합니다. 상태 배지는 색상과 텍스트로 표시하며 이미지와 원래 장비 색상은 유지합니다.
+- U 번호·빈 슬롯 옵션은 전·후면 번호와 빈 U 안내선을 표시합니다. 역방향 U 번호도 반영합니다.
+- 랙 위에 사용/전체 U, 잔여 U, 장비 수, 사용률을 표시합니다. 70% 미만은 청록, 70% 이상 주황, 90% 이상 빨강입니다.
+- 수치는 **조회 가능한 장비 기준**이며 필터와 무관한 전체 수치입니다. 전·후면 중복 U는 한 번만 집계하고 0U·미배치·범위 초과 장비는 U 집계에서 제외합니다. 잔여 U는 설치 가능 여부를 보장하지 않으며 전·후면, 예약 공간, 깊이를 별도로 확인하세요.
+- 모든 검색·표시 옵션은 NetBox 원본과 저장된 배치를 변경하지 않습니다.
+
 Location에 서버실 크기를 연결하고 기존 랙을 수동 배치하는 NetBox 플러그인입니다.
 랙 외형, U 위치, 전면/후면 장착, 장비 이미지와 색상을 3D로 표시합니다.
 
 - 저장소: https://github.com/redplug/netbox-room-3d
 - 설치 파일: [GitHub Releases](https://github.com/redplug/netbox-room-3d/releases)
-- 현재 릴리스: **v0.1.3**
+- 현재 릴리스: **v0.1.4**
 - 패키지 허용 범위: **NetBox 4.5.x / Python 3.12 이상**. 실제 통합 검증 버전은 **NetBox 4.5.0**입니다.
 
-이미 설치된 운영 서버는 **[기존 데이터 유지 업데이트 가이드](UPGRADE.md)**를 따라 v0.1.2 → v0.1.3로 업데이트하세요.
+이미 설치된 운영 서버는 **[기존 데이터 유지 업데이트 가이드](UPGRADE.md)**를 따라 v0.1.3 → v0.1.4로 업데이트하세요.
 
 ## 운영 서버 배포 전 확인
 
@@ -18,13 +29,13 @@ Location에 서버실 크기를 연결하고 기존 랙을 수동 배치하는 N
 1. 운영 NetBox 버전, 가상환경 경로 또는 Docker 이미지 태그를 확인합니다. 4.5.x 이외 버전은 현재 설치를 차단합니다.
 2. 운영과 동일한 버전의 검증 환경에서 먼저 설치합니다. 4.5.0 이외의 패치 버전까지 모두 테스트한 것은 아닙니다.
 3. 기존 DB, NetBox 설정 및 미디어를 백업합니다. 설치 시 플러그인용 DB 테이블이 추가됩니다.
-4. GitHub Releases에서 `netbox_room_3d-0.1.3-py3-none-any.whl`과 `SHA256SUMS`를 다운로드합니다.
+4. GitHub Releases에서 `netbox_room_3d-0.1.4-py3-none-any.whl`과 `SHA256SUMS`를 다운로드합니다.
    비공개 저장소는 권한이 있는 GitHub 계정으로 로그인해야 합니다.
 
 ```sh
 # GitHub CLI를 사용하는 다운로드 예시 (브라우저로 받아도 됩니다)
-gh release download v0.1.3 --repo redplug/netbox-room-3d \
-  --pattern 'netbox_room_3d-0.1.3-py3-none-any.whl' --pattern SHA256SUMS
+gh release download v0.1.4 --repo redplug/netbox-room-3d \
+  --pattern 'netbox_room_3d-0.1.4-py3-none-any.whl' --pattern SHA256SUMS
 # SHA256SUMS에는 wheel과 소스 압축파일의 체크섬이 있습니다.
 sha256sum --ignore-missing -c SHA256SUMS
 ```
@@ -38,7 +49,7 @@ wheel에는 3D 화면의 JS/CSS가 포함되어 **운영 서버에 Node.js나 np
 
 ```sh
 sudo /opt/netbox/venv/bin/pip install \
-  /opt/netbox/plugin-wheels/netbox_room_3d-0.1.3-py3-none-any.whl
+  /opt/netbox/plugin-wheels/netbox_room_3d-0.1.4-py3-none-any.whl
 ```
 
 `/opt/netbox/netbox/netbox/configuration.py`의 기존 `PLUGINS` 목록에 추가합니다.
@@ -63,7 +74,7 @@ NetBox 업그레이드 때 가상환경이 재생성되어도 플러그인이 �
 `/opt/netbox/local_requirements.txt`에 아래 한 줄을 추가합니다. wheel 파일은 이 경로에 계속 보관합니다.
 
 ```text
-/opt/netbox/plugin-wheels/netbox_room_3d-0.1.3-py3-none-any.whl
+/opt/netbox/plugin-wheels/netbox_room_3d-0.1.4-py3-none-any.whl
 ```
 
 ## 운영 배포 B: 기존 netbox-docker
@@ -76,16 +87,16 @@ NetBox 업그레이드 때 가상환경이 재생성되어도 플러그인이 �
 # Dockerfile.room3d
 ARG NETBOX_IMAGE
 FROM ${NETBOX_IMAGE}
-COPY plugin-wheels/netbox_room_3d-0.1.3-py3-none-any.whl /tmp/
+COPY plugin-wheels/netbox_room_3d-0.1.4-py3-none-any.whl /tmp/
 RUN /usr/local/bin/uv pip install --python /opt/netbox/venv/bin/python \
-    /tmp/netbox_room_3d-0.1.3-py3-none-any.whl
+    /tmp/netbox_room_3d-0.1.4-py3-none-any.whl
 ```
 
 ```sh
 # v4.5.0 환경 예시. 운영 이미지를 의도치 않게 업그레이드하지 마세요.
 docker build -f Dockerfile.room3d \
   --build-arg NETBOX_IMAGE=netboxcommunity/netbox:v4.5.0 \
-  -t netbox-with-room3d:0.1.3 .
+  -t netbox-with-room3d:0.1.4 .
 ```
 
 기존 Compose 설정에서 웹(`netbox`)과 작업자(`netbox-worker`, 사용 중이면 housekeeping 포함)가
@@ -128,7 +139,7 @@ docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage
 
 ## 업데이트 / 되돌리기
 
-**[UPGRADE.md](UPGRADE.md)**에 기존 설치의 Linux/systemd·Docker 업데이트, 백업, 데이터 비교 및 v0.1.1 롤백 절차를 정리했습니다. v0.1.3에는 DB 마이그레이션이 없으며 기존 데이터와 호환됩니다. 새 오브젝트는 JSON에 종류와 회전값을 저장하므로 구버전 롤백 시 주의사항을 확인하세요.
+**[UPGRADE.md](UPGRADE.md)**에 기존 설치의 Linux/systemd·Docker 업데이트, 백업, 데이터 비교 및 v0.1.1 롤백 절차를 정리했습니다. v0.1.4에는 DB 마이그레이션이 없으며 기존 데이터와 호환됩니다. 새 오브젝트는 JSON에 종류와 회전값을 저장하므로 구버전 롤백 시 주의사항을 확인하세요.
 
 ## 문제 해결
 

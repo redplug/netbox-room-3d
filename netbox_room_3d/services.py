@@ -41,6 +41,11 @@ def inventory(user, location, include_descendants=False):
     for interface in Interface.objects.restrict(user, 'view').filter(device_id__in=[d.pk for d in devices]).order_by('name'):
         interfaces[interface.device_id].append({'id': interface.pk, 'name': interface.name})
     primary_ids = {pk for d in devices for pk in (d.primary_ip4_id, d.primary_ip6_id) if pk}
+    interface_devices = {i['id']: device_id for device_id, ports in interfaces.items() for i in ports}
+    device_ips = defaultdict(list)
+    for ip in IPAddress.objects.restrict(user, 'view').filter(assigned_object_type__app_label='dcim',
+            assigned_object_type__model='interface', assigned_object_id__in=interface_devices):
+        device_ips[interface_devices[ip.assigned_object_id]].append(str(ip.address))
     primary_ips = dict(IPAddress.objects.restrict(user, 'view').filter(pk__in=primary_ids).values_list('pk', 'address'))
     primary_ports = dict(IPAddress.objects.restrict(user, 'view').filter(
         pk__in=primary_ids, assigned_object_type__app_label='dcim', assigned_object_type__model='interface'
@@ -65,6 +70,7 @@ def inventory(user, location, include_descendants=False):
             'position': float(device.position) if device.position is not None else None,
             'face': device.face, 'u_height': float(dt.u_height), 'full_depth': dt.is_full_depth,
             'status': device.status, 'color': '#' + device.role.color,
+            'status_label': str(device.get_status_display()), 'ip_addresses': device_ips[device.pk],
             'front_image': image_url(dt.front_image) if type_visible else None,
             'rear_image': image_url(dt.rear_image) if type_visible else None,
             'images': attachments[device.pk],

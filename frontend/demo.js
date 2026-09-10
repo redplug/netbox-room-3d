@@ -12,7 +12,7 @@ export function demoData(id = 1) {
       id: id * 10000 + i * 100 + n, name: `${n < 2 ? 'sw' : 'srv'}-${String(i + 1).padStart(2, '0')}-${String(n + 1).padStart(2, '0')}`,
       model: n < 2 ? '48-port switch' : 'Rack server · 2U', u_height: n < 2 ? 1 : 2,
       position: n < 2 ? 41 + n : 2 + (n - 2) * 4, face: i === 2 && n < 2 ? 'rear' : 'front', full_depth: n >= 2,
-      status: 'active', color: n < 2 ? '#3b82f6' : ['#0d9488', '#64748b', '#8b5cf6'][i % 3],
+      status: n === 8 ? 'offline' : 'active', color: n < 2 ? '#3b82f6' : ['#0d9488', '#64748b', '#8b5cf6'][i % 3],
       front_image: n === 2 || n === 3 ? panel() : null,
       rear_image: n === 2 ? panel(true) : null, images: [], url: '',
       interfaces: n >= 2 ? [{ id: n * 2, name: 'eth0' }, { id: n * 2 + 1, name: 'eth1' }] : [],

@@ -74,6 +74,10 @@ class RoomAPITest(TestCase):
         row = inventory(self.admin, self.location)[self.rack.pk]['devices'][0]
         self.assertEqual(row['interfaces'][0]['primary_ips'], ['192.0.2.20/24'])
         self.assertEqual(row['interfaces'][1]['primary_ips'], ['2001:db8::20/64'])
+        self.assertEqual(set(row['ip_addresses']), {'192.0.2.20/24', '2001:db8::20/64'})
+        self.grant(Rack, ['view']); self.grant(Device, ['view'])
+        hidden = inventory(self.reader, self.location)[self.rack.pk]['devices'][0]
+        self.assertEqual(hidden['ip_addresses'], [])
 
     def test_room_object_types_round_trip_and_validation(self):
         for kind in ('pillar', 'ups', 'cooling', 'battery', 'desk', 'door', 'glass', 'wall', 'solid'):

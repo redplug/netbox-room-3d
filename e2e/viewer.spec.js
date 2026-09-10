@@ -1,5 +1,48 @@
 import { test, expect } from '@playwright/test';
 
+test('partial IP results show matching IPs and pulse both server and rack selection', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:5173');
+  await page.getByRole('searchbox').fill('192.0.2.1');
+  const result = page.locator('[data-action=find-device]').first();
+  await expect(result).toContainText('일치 IP: 192.0.2.12/24');
+  await result.click();
+  const marker = page.locator('.r3-focus-tag');
+  await expect(marker).toContainText('srv-01-03');
+  const initial = await marker.evaluate(el => el.style.opacity);
+  await expect.poll(() => marker.evaluate(el => el.style.opacity)).not.toBe(initial);
+  await page.screenshot({ path: 'artifacts/search-server-highlight.png' });
+  await page.locator('.r3-rack-select[data-id="101"]').click();
+  await expect(marker).toHaveCount(1);
+  await expect(marker).toContainText('A-01');
+  await page.screenshot({ path: 'artifacts/search-rack-highlight.png' });
+  await expect(page.getByRole('button', { name: '배치 저장', exact: true })).toBeDisabled();
+  await page.getByRole('searchbox').fill('no-match-xyz');
+  await expect(marker).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('inventory tools: IP search focuses device, status filter and overlays do not edit layout', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:5173');
+  await expect(page.getByRole('heading', { name: 'A-01', exact: true })).toBeVisible();
+  await page.getByRole('searchbox').fill('192.0.2.18');
+  const result = page.locator('[data-action=find-device]').first();
+  await expect(result).toContainText('srv-01-09');
+  await result.click();
+  await expect(page.locator('.r3-device.active')).toContainText('srv-01-09');
+  await page.locator('#r3-status-filter').selectOption('active');
+  await expect(page.locator('[data-action=find-device]')).toHaveCount(0);
+  await page.locator('#r3-status-filter').selectOption('offline');
+  await expect(page.locator('[data-action=find-device]')).toHaveCount(8);
+  for (const id of ['units', 'usage', 'statuses']) {
+    await page.locator(`#r3-${id}`).uncheck(); await page.locator(`#r3-${id}`).check();
+  }
+  await expect(page.getByRole('button', { name: '배치 저장', exact: true })).toBeDisabled();
+  await page.screenshot({ path: 'artifacts/inventory-tools.png', fullPage: true });
+  expect(errors).toEqual([]);
+});
+
 test('server display: global color option and rear Primary IP hover', async ({ page }) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('http://127.0.0.1:5173');
