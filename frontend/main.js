@@ -23,7 +23,7 @@ root.innerHTML = `
       <main class="r3-stage"><div class="r3-toolbar"><div class="r3-segment"><button data-action="view" data-view="3d" class="active">3D 보기</button><button data-action="view" data-view="top">평면 배치</button><button data-action="view" data-view="walk">워킹 모드</button></div><div class="r3-tools"><button data-action="fit" title="전체 보기">전체 보기</button><button data-action="undo" title="되돌리기">↶ 되돌리기</button><label><input id="r3-snap" type="checkbox" checked> 격자 맞춤</label></div></div><div id="r3-canvas"></div><div class="r3-stage-footer"><span id="r3-scene-stats"></span><span id="r3-controls-help">드래그 회전 · 우클릭 이동 · 휠 확대</span></div><div id="r3-invalid" role="alert" hidden></div></main>
       <aside id="r3-inspector" class="r3-inspector"></aside>
     </div>
-    <footer class="r3-footer"><span><i></i> ${api.demo ? '샘플 데이터 · 이 브라우저에 저장됩니다' : 'NetBox 인벤토리 · 레이아웃만 저장됩니다'}</span><div><label><input id="r3-units" type="checkbox" checked> U 번호·빈 슬롯</label><label><input id="r3-usage" type="checkbox" checked> 사용 현황</label><label><input id="r3-statuses" type="checkbox" checked> 상태 표시</label><label><input id="r3-grid" type="checkbox" checked> 격자</label><label><input id="r3-walls" type="checkbox" checked> 벽</label><label><input id="r3-labels" type="checkbox" checked> 이름</label><label><input id="r3-transparent" type="checkbox" checked> 투명 프레임</label><label><input id="r3-sides" type="checkbox"> 랙 측면 덮개</label><label><input id="r3-deviceColors" type="checkbox"> 서버 상·하단 할당 색상</label></div></footer>
+    <footer class="r3-footer"><span><i></i> ${api.demo ? '샘플 데이터 · 이 브라우저에 저장됩니다' : 'NetBox 인벤토리 · 레이아웃만 저장됩니다'}</span><div><label><input id="r3-units" type="checkbox" checked> U 번호·빈 슬롯</label><label><input id="r3-usage" type="checkbox" checked> 사용 현황</label><label><input id="r3-statuses" type="checkbox" checked> 상태 표시</label><label><input id="r3-grid" type="checkbox" checked> 격자 표시</label><label>한 칸 (mm)<input id="r3-grid-size" type="number" min="100" max="5000" step="1" required aria-label="격자 한 칸 (mm)"></label><label><input id="r3-walls" type="checkbox" checked> 벽</label><label><input id="r3-labels" type="checkbox" checked> 이름</label><label><input id="r3-transparent" type="checkbox" checked> 투명 프레임</label><label><input id="r3-sides" type="checkbox"> 랙 측면 덮개</label><label><input id="r3-deviceColors" type="checkbox"> 서버 상·하단 할당 색상</label></div></footer>
   </div>
   <dialog id="r3-room-dialog"><form id="r3-room-form"><div class="r3-dialog-title"><h2>서버실 기본 설정</h2><button type="button" class="r3-icon-button" data-action="close-room" aria-label="닫기">×</button></div><p>선택한 Location에 공간을 연결합니다. 모든 치수는 mm입니다.</p><label>서버실 이름<input name="name" required maxlength="100"></label><div class="r3-form-grid"><label>가로 (mm)<input type="number" name="width" min="500" max="100000" required></label><label>세로 (mm)<input type="number" name="depth" min="500" max="100000" required></label><label>높이 (mm)<input type="number" name="height" min="500" max="100000" required></label><label>격자 크기 (mm)<input type="number" name="grid" min="100" max="5000" required></label></div><label class="r3-check"><input name="include_descendants" type="checkbox"> 하위 Location의 랙 포함</label><p class="r3-help">공간을 줄이면 기존 배치가 경계를 벗어날 수 있습니다.</p><div class="r3-dialog-actions"><button type="button" data-action="close-room" class="r3-btn">닫기</button><button type="submit" class="r3-btn primary">설정 적용</button></div></form></dialog>`;
 const $ = selector => root.querySelector(selector);
@@ -61,6 +61,7 @@ function renderLocations() {
 function render(keepInspector = false, syncScene = true) {
   if (!data || !layout) return;
   const problems = errors(layout, data.racks);
+  $('#r3-grid-size').value = layout.grid; $('#r3-grid-size').disabled = !canEdit();
   $('#r3-save-state').textContent = !data.can_edit ? '읽기 전용' : busy ? '처리 중…' : dirty ? '저장하지 않은 변경' : `저장됨 · v${layout.revision}`;
   $('#r3-save-state').className = dirty ? 'unsaved' : '';
   $('[data-action=save]').disabled = !canEdit() || !dirty || problems.length > 0;
@@ -181,6 +182,13 @@ root.addEventListener('click', e => {
 root.addEventListener('input', e => { if (e.target.id === 'r3-search') { filter = e.target.value; scene.clearFocus(); render(false, false); } });
 root.addEventListener('change', async e => {
   const el = e.target;
+  if (el.id === 'r3-grid-size') {
+    const value = Number(el.value);
+    if (!canEdit()) { render(); return; }
+    if (!el.validity.valid || !Number.isInteger(value) || value < 100 || value > 5000) { notice('격자 한 칸은 100~5000 mm 정수로 입력하세요.', true); render(); return; }
+    if (value !== layout.grid) { remember(); layout.grid = value; changed(); notice('격자 크기를 적용했습니다. 배치 저장을 누르면 유지됩니다.'); }
+    return;
+  }
   if (el.id === 'r3-status-filter') { opts.statusFilter = el.value; render(); return; }
   if (el.id === 'r3-only-rack-locations') { onlyRackLocations = el.checked; renderLocations(); return; }
   if (el.id === 'r3-location') { if (!dirty || window.confirm('저장하지 않은 변경을 버리고 Location을 전환할까요?')) await load(Number(el.value)); else el.value = String(locationId); return; }

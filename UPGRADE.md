@@ -1,6 +1,6 @@
-# 기존 설치 업데이트: v0.1.4 → v0.1.5
+# 기존 설치 업데이트: v0.1.5 → v0.1.6
 
-이 절차는 **이미 Room 3D를 사용하는 NetBox**에 3D/평면 전환·드래그 성능 개선, 화면 높이 자동 조정, 평면 전·후면 표기를 적용합니다.
+이 절차는 **이미 Room 3D를 사용하는 NetBox**에 격자 가시성 개선과 한 칸 크기(mm) 설정을 적용합니다. 이전 성능 개선과 표시 기능도 유지합니다.
 NetBox 자체 버전, 데이터베이스, 미디어 저장소, PLUGINS와 기존 권한은 유지합니다.
 이번 버전은 DB 모델·마이그레이션 변경이 없으며 기존 JSON 데이터를 그대로 읽습니다. 이번 변경은 프런트엔드 리팩토링으로 저장 JSON 형식은 v0.1.4와 같습니다. 기존 서버실 크기,
 랙 좌표·회전·잠금, 장애물, 장비 색상·이미지 지정 및 revision을 그대로 사용합니다.
@@ -13,7 +13,7 @@ NetBox 자체 버전, 데이터베이스, 미디어 저장소, PLUGINS와 기존
 
 1. 유지보수 시간 동안 사용자 저장과 자동화 쓰기를 중지합니다.
 2. 기존 운영 절차로 **전체 PostgreSQL DB, NetBox 설정, 미디어**를 백업하고 복구 가능한지 확인합니다.
-   로컬 PostgreSQL의 DB 이름이 netbox인 예: `sudo -u postgres pg_dump -Fc netbox > netbox-before-room3d-0.1.5.dump`.
+   로컬 PostgreSQL의 DB 이름이 netbox인 예: `sudo -u postgres pg_dump -Fc netbox > netbox-before-room3d-0.1.6.dump`.
    외부/관리형 DB는 해당 백업 절차를 사용합니다. 비밀번호는 명령행에 넣지 않습니다.
 3. 현재 wheel/컨테이너 이미지와 설정을 롤백용으로 보관합니다. NetBox 버전은 변경하지 않습니다.
 4. 기존 서버실의 랙 배치·장비 표현을 기록하고 아래 방법으로 레이아웃 스냅샷도 보관합니다.
@@ -47,23 +47,23 @@ chmod 600 /secure-backup/room3d-before.json
 # 운영 Linux 호스트에서 실행합니다. 같은 버전의 재다운로드도 가능합니다.
 (
   set -eu
-  mkdir -p ./room3d-downloads/v0.1.5
-  cd ./room3d-downloads/v0.1.5
-  gh release download v0.1.5 --repo redplug/netbox-room-3d \
-    --pattern 'netbox_room_3d-0.1.5-py3-none-any.whl' --pattern SHA256SUMS \
+  mkdir -p ./room3d-downloads/v0.1.6
+  cd ./room3d-downloads/v0.1.6
+  gh release download v0.1.6 --repo redplug/netbox-room-3d \
+    --pattern 'netbox_room_3d-0.1.6-py3-none-any.whl' --pattern SHA256SUMS \
     --clobber
 
   # wheel이 실제로 있는지 확인하고 검증합니다.
   # 함께 받지 않은 소스 압축파일의 체크섬은 건너뜁니다.
-  test -s netbox_room_3d-0.1.5-py3-none-any.whl
+  test -s netbox_room_3d-0.1.6-py3-none-any.whl
   sha256sum --ignore-missing -c SHA256SUMS
 
   # 검증 성공 시에만 운영용 플러그인 패키지 보관 폴더로 복사합니다.
   sudo install -d -m 0755 /opt/netbox/plugin-wheels
-  sudo install -m 0644 netbox_room_3d-0.1.5-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.5-py3-none-any.whl
-  cmp netbox_room_3d-0.1.5-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.5-py3-none-any.whl
+  sudo install -m 0644 netbox_room_3d-0.1.6-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.6-py3-none-any.whl
+  cmp netbox_room_3d-0.1.6-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.1.6-py3-none-any.whl
 )
 ```
 
@@ -82,7 +82,7 @@ chmod 600 /secure-backup/room3d-before.json
 ```sh
 sudo systemctl stop netbox netbox-rq
 sudo /opt/netbox/venv/bin/pip install --upgrade --no-deps \
-  /opt/netbox/plugin-wheels/netbox_room_3d-0.1.5-py3-none-any.whl
+  /opt/netbox/plugin-wheels/netbox_room_3d-0.1.6-py3-none-any.whl
 sudo /opt/netbox/venv/bin/pip show netbox-room-3d
 cd /opt/netbox/netbox
 sudo /opt/netbox/venv/bin/python manage.py showmigrations netbox_room_3d
@@ -92,17 +92,17 @@ sudo systemctl start netbox netbox-rq
 sudo systemctl status netbox netbox-rq --no-pager
 ```
 
-버전은 `0.1.5`, 마이그레이션은 `[X] 0001_initial`이어야 합니다.
+버전은 `0.1.6`, 마이그레이션은 `[X] 0001_initial`이어야 합니다.
 **이번 업데이트에는 새 마이그레이션이 없으므로 migrate 실행이 필요 없습니다.**
 미적용 마이그레이션이 보이면 기존 설치 상태를 먼저 조사하세요.
-`local_requirements.txt`의 기존 Room 3D wheel 경로를 0.1.5 경로로 **교체**합니다.
+`local_requirements.txt`의 기존 Room 3D wheel 경로를 0.1.6 경로로 **교체**합니다.
 다른 플러그인 항목은 유지하며, 같은 패키지의 구버전 항목을 중복으로 남기지 않습니다.
 
 ## 3B. 기존 netbox-docker 커스텀 이미지
 
-1. 현재 커스텀 Dockerfile의 Room 3D wheel 파일명/설치 대상을 0.1.5로 바꿉니다.
+1. 현재 커스텀 Dockerfile의 Room 3D wheel 파일명/설치 대상을 0.1.6로 바꿉니다.
    기존 NetBox 베이스 이미지 태그 또는 digest, 다른 플러그인 설치 단계는 그대로 유지합니다.
-2. 기존 빌드 방식으로 새 이미지를 생성합니다. 예: `docker build -f Dockerfile.room3d --build-arg NETBOX_IMAGE=현재_베이스_이미지 -t netbox-with-room3d:0.1.5 .`.
+2. 기존 빌드 방식으로 새 이미지를 생성합니다. 예: `docker build -f Dockerfile.room3d --build-arg NETBOX_IMAGE=현재_베이스_이미지 -t netbox-with-room3d:0.1.6 .`.
 3. 기존 Compose에서 웹·worker·사용 중인 housekeeping의 `image:`만 새 이미지로 맞춥니다.
    **DB/Redis 연결, 볼륨 이름·마운트, 설정 파일, 환경 변수, 네트워크, Compose 프로젝트명은 유지**합니다.
 4. 기존 운영 디렉터리에서 아래를 실행합니다. housekeeping을 사용하면 stop/up 대상에 함께 추가합니다.
@@ -136,7 +136,7 @@ docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage
 
 ## 5. v0.1.3로 되돌리기
 
-v0.1.5와 v0.1.3은 DB 구조와 레이아웃 JSON 형식이 같습니다. 기존 DB·미디어·설정을 유지하고 이전 패키지와 정적 파일을 복구합니다.
+v0.1.6와 v0.1.3은 DB 구조와 레이아웃 JSON 형식이 같습니다. 기존 DB·미디어·설정을 유지하고 이전 패키지와 정적 파일을 복구합니다.
 Linux는 서비스를 중지하고 보관한 0.1.3 wheel을 `pip install --no-deps /경로/netbox_room_3d-0.1.3-py3-none-any.whl`로 설치한 뒤
 `local_requirements.txt`도 이전 경로로 복원합니다. `collectstatic --no-input`, `check` 후 서비스를 시작합니다.
 Docker는 관련 서비스의 `image:`를 보관한 이전 이미지로 복원하고 3B의 재생성·정적 파일 수집·검사를 반복합니다.

@@ -92,7 +92,8 @@ export function buildRoom(layout, opts) {
     const points = [], step = Math.max(.1, m(layout.grid));
     for (let x = 0; x <= w; x += step) points.push(new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, 0, d));
     for (let z = 0; z <= d; z += step) points.push(new THREE.Vector3(0, 0, z), new THREE.Vector3(w, 0, z));
-    group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: '#cbd5df', transparent: true, opacity: .65 })));
+    const grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: '#8195a5', transparent: true, opacity: .85, depthWrite: false }));
+    grid.position.y = .002; grid.userData.gridSize = layout.grid; group.add(grid);
   }
   if (opts.walls) {
     this.cube(w, h, .07, w / 2, h / 2, 0, '#cdd9df', group, { transparent: true, opacity: .24, depthWrite: false });
