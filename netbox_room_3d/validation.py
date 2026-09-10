@@ -94,7 +94,15 @@ def validate_scene(payload, racks, device_ids):
         label = item.get('name', '기둥')
         if not isinstance(label, str) or len(label) > 100:
             raise SceneError('장애물 이름은 100자 이하여야 합니다.')
-        block = {'id': block_id, 'name': label, 'label': label, 'rotation': 0}
+        kind = item.get('type', 'pillar')
+        if not isinstance(kind, str) or kind not in ('pillar', 'ups', 'cooling', 'battery', 'desk', 'door', 'glass', 'wall', 'solid'):
+            raise SceneError('지원하지 않는 룸 오브젝트 종류입니다.')
+        rotation = integer(item.get('rotation', 0), '회전', 0, 270)
+        if rotation not in (0, 90, 180, 270):
+            raise SceneError('회전은 0, 90, 180, 270도만 지원합니다.')
+        block = {'id': block_id, 'name': label, 'label': label, 'rotation': rotation}
+        if 'type' in item:
+            block['type'] = kind
         for key in ('x', 'z'):
             block[key] = number(item.get(key), key)
         for key in ('width', 'depth', 'height'):

@@ -115,3 +115,6 @@
   #room3d .r3-stage-footer { flex-direction:column; gap:3px; }
 }
 @media (max-width:850px) { #room3d .r3-app { min-width:0; } #room3d .r3-workspace { grid-template-columns:180px minmax(260px,1fr); } #room3d .r3-inspector { grid-column:1 / -1; max-height:400px; } #room3d .r3-workspace { height:auto; max-height:none; } #room3d .r3-stage { height:550px; } #room3d .r3-header { height:auto; padding:15px; gap:12px; flex-wrap:wrap; } #room3d .r3-location-bar { flex-wrap:wrap; } #room3d .r3-footer { gap:10px; flex-wrap:wrap; } }
+
+#room3d .r3-location-bar > .r3-check { font-size:11px; letter-spacing:0; gap:6px; white-space:nowrap; }
+.r3-device-tooltip { position: absolute; z-index: 10; pointer-events: none; background: #172d3b; color: #fff; padding: 7px 10px; border-radius: 5px; font-size: 12px; max-width: 95%; overflow-wrap: anywhere; }

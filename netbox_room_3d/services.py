@@ -1,7 +1,8 @@
 from collections import defaultdict
 from copy import deepcopy
 
-from dcim.models import Device, DeviceType, Location, Rack
+from dcim.models import Device, DeviceType, Interface, Location, Rack
+from ipam.models import IPAddress
 from extras.models import ImageAttachment
 
 
@@ -36,12 +37,25 @@ def inventory(user, location, include_descendants=False):
     racks = {rack.pk: rack_data(rack) for rack in rack_qs}
     devices = list(Device.objects.restrict(user, 'view').filter(rack_id__in=racks).select_related('device_type', 'role'))
     type_ids = set(DeviceType.objects.restrict(user, 'view').filter(pk__in=[d.device_type_id for d in devices]).values_list('pk', flat=True))
+    interfaces = defaultdict(list)
+    for interface in Interface.objects.restrict(user, 'view').filter(device_id__in=[d.pk for d in devices]).order_by('name'):
+        interfaces[interface.device_id].append({'id': interface.pk, 'name': interface.name})
+    primary_ids = {pk for d in devices for pk in (d.primary_ip4_id, d.primary_ip6_id) if pk}
+    primary_ips = dict(IPAddress.objects.restrict(user, 'view').filter(pk__in=primary_ids).values_list('pk', 'address'))
+    primary_ports = dict(IPAddress.objects.restrict(user, 'view').filter(
+        pk__in=primary_ids, assigned_object_type__app_label='dcim', assigned_object_type__model='interface'
+    ).values_list('pk', 'assigned_object_id'))
     attachments = defaultdict(list)
     for a in ImageAttachment.objects.restrict(user, 'view').filter(
         object_type__app_label='dcim', object_type__model='device', object_id__in=[d.pk for d in devices]
     ):
         attachments[a.object_id].append({'id': a.pk, 'name': a.name or f'Image {a.pk}', 'url': image_url(a.image)})
     for device in devices:
+        assigned_primary_ports = {primary_ports.get(pk) for pk in (device.primary_ip4_id, device.primary_ip6_id)} - {None}
+        for interface in interfaces[device.pk]:
+            interface['is_primary'] = interface['id'] in assigned_primary_ports
+            interface['primary_ips'] = [str(primary_ips[pk]) for pk in (device.primary_ip4_id, device.primary_ip6_id)
+                                        if pk in primary_ips and primary_ports.get(pk) == interface['id']]
         dt = device.device_type
         # DeviceType visibility controls access to its image/model metadata.
         type_visible = dt.pk in type_ids
@@ -54,6 +68,8 @@ def inventory(user, location, include_descendants=False):
             'front_image': image_url(dt.front_image) if type_visible else None,
             'rear_image': image_url(dt.rear_image) if type_visible else None,
             'images': attachments[device.pk],
+            'interfaces': interfaces[device.pk],
+            'primary_ips': [str(primary_ips[pk]) for pk in (device.primary_ip4_id, device.primary_ip6_id) if pk in primary_ips],
         })
     return racks
 

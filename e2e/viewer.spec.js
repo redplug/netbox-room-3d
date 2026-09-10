@@ -1,5 +1,30 @@
 import { test, expect } from '@playwright/test';
 
+test('server display: global color option and rear Primary IP hover', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:5173');
+  await expect(page.getByRole('heading', { name: 'A-01', exact: true })).toBeVisible();
+  const colors = page.getByRole('checkbox', { name: '서버 상·하단 할당 색상', exact: true });
+  await expect(colors).not.toBeChecked();
+  await colors.check(); await colors.uncheck();
+  await expect(page.getByRole('button', { name: '배치 저장', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '후면 보기', exact: true }).click();
+  const hover = await page.locator('#r3-canvas canvas').evaluate(canvas => {
+    const rect = canvas.getBoundingClientRect();
+    for (let y = rect.top + 50; y < rect.bottom - 10; y += 2) {
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: rect.left + rect.width / 2, clientY: y }));
+      const tooltip = document.querySelector('.r3-device-tooltip');
+      if (!tooltip.hidden) return tooltip.textContent;
+    }
+    return '';
+  });
+  expect(hover).toMatch(/srv-01-.*192\.0\.2\./);
+  await page.screenshot({ path: 'artifacts/server-rear-tooltip.png' });
+  await page.getByRole('button', { name: '전면 보기', exact: true }).click();
+  await page.screenshot({ path: 'artifacts/server-front-names.png' });
+  expect(errors).toEqual([]);
+});
+
 test('sample: room setup, manual placement, collision, lock, undo, save and restore', async ({ page }) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('http://127.0.0.1:5173');
@@ -129,4 +154,83 @@ test('sample: walking mode moves, looks around, stops on blur and exits without 
   await page.getByRole('button', { name: '평면 배치', exact: true }).click();
   await expect(page.locator('#r3-controls-help')).toContainText('랙 드래그');
   expect(errors).toEqual([]);
+});
+
+test('sample: side panels toggle without changing saved layout', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:5173');
+  await expect(page.getByRole('heading', { name: 'A-01', exact: true })).toBeVisible();
+  const toggle = page.getByRole('checkbox', { name: '랙 측면 덮개', exact: true });
+  await expect(toggle).not.toBeChecked();
+  const canvas = page.locator('#r3-canvas canvas');
+  await page.screenshot({ path: 'artifacts/rack-sides-open.png', fullPage: true });
+  const open = await canvas.screenshot();
+  await toggle.check();
+  expect((await canvas.screenshot()).equals(open)).toBe(false);
+  await page.screenshot({ path: 'artifacts/rack-sides-closed.png', fullPage: true });
+  await toggle.uncheck();
+  await expect(page.getByRole('button', { name: '배치 저장', exact: true })).toBeDisabled();
+  expect(errors).toEqual([]);
+});
+
+test('sample: room object catalog saves types and rotation across reload', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:5173');
+  await expect(page.getByRole('heading', { name: 'A-01', exact: true })).toBeVisible();
+  for (const [type, name] of [['ups','UPS'], ['cooling','항온항습기'], ['battery','배터리 캐비닛'], ['desk','책상'], ['door','문'], ['glass','유리벽'], ['wall','벽'], ['solid','사용 불가 공간']]) {
+    await page.getByRole('combobox', { name: '오브젝트 종류', exact: true }).selectOption(type);
+    await page.getByRole('button', { name: '＋ 룸 오브젝트 추가', exact: true }).click();
+    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+    await expect(page.locator('#r3-invalid')).toBeHidden();
+  }
+  await page.getByRole('combobox', { name: '방향', exact: true }).selectOption('90');
+  await page.getByRole('button', { name: '배치 저장', exact: true }).click();
+  await expect(page.locator('#r3-save-state')).toContainText('v1');
+  await page.reload();
+  await page.getByRole('button', { name: '▧ 사용 불가 공간', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '방향', exact: true })).toHaveValue('90');
+  await expect(page.locator('#r3-block-list button')).toHaveCount(9);
+  await page.screenshot({ path: 'artifacts/room-objects.png', fullPage: true });
+  expect(errors).toEqual([]);
+});
+
+test('sample: room object can be dragged in top view and restored', async ({ page }) => {
+  await page.goto('http://127.0.0.1:5173');
+  await page.getByRole('button', { name: '▧ 기둥', exact: true }).click();
+  await page.getByRole('button', { name: '평면 배치', exact: true }).click();
+  const bounds = await page.locator('.r3-label.active').boundingBox();
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2 + 12);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 - 40, bounds.y + bounds.height / 2 + 12, { steps: 8 });
+  await page.mouse.up();
+  const x = page.getByRole('spinbutton', { name: 'X (mm)', exact: true });
+  await expect(x).not.toHaveValue('9000');
+  const value = await x.inputValue();
+  await page.getByRole('button', { name: '배치 저장', exact: true }).click();
+  await expect(page.locator('#r3-save-state')).toContainText('v1');
+  await page.reload();
+  await page.getByRole('button', { name: '▧ 기둥', exact: true }).click();
+  await expect(x).toHaveValue(value);
+});
+
+test('location filter hides empty locations and preserves current edits', async ({ page }) => {
+  await page.route('**/frontend/api.js*', async route => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace("name: '네트워크실 B', has_racks: true", "name: '네트워크실 B', has_racks: false");
+    await route.fulfill({ response, body });
+  });
+  await page.goto('http://127.0.0.1:5173');
+  const select = page.getByRole('combobox', { name: 'Location 선택', exact: true });
+  await select.selectOption('2');
+  await page.getByRole('button', { name: '＋ 룸 오브젝트 추가', exact: true }).click();
+  await expect(page.locator('#r3-save-state')).toContainText('저장하지 않은 변경');
+  const filter = page.getByRole('checkbox', { name: '랙이 배치된 Location만', exact: true });
+  await filter.check();
+  await expect(select.locator('option[value="2"]')).toHaveCount(0);
+  await expect(select.locator('option[value="1"]')).toHaveCount(1);
+  await expect(page.locator('#r3-room-summary')).toContainText('네트워크실 B');
+  await expect(page.locator('#r3-save-state')).toContainText('저장하지 않은 변경');
+  await filter.uncheck();
+  await expect(select).toHaveValue('2');
+  await expect(select.locator('option')).toHaveCount(2);
 });

@@ -1,4 +1,5 @@
 import './style.css';
+import { objectTypes } from './objects.js';
 import { API } from './api.js';
 import { RoomScene } from './scene.js';
 import { dimensions, deviceBottom, errors, safeURL, snap } from './geometry.js';
@@ -8,19 +9,20 @@ const clone = value => structuredClone(value);
 const root = document.querySelector('#room3d');
 const api = new API(root);
 let data, layout, baseline, baselineRacks, locationId, locations = [], selected = null, scene, dirty = false, busy = false, undo = [], dragBefore;
+let onlyRackLocations = false;
 let mode = '3d', filter = '', showPlaced = false, loadGeneration = 0;
-const opts = { grid: true, walls: true, labels: true, transparent: true, snap: true };
+const opts = { grid: true, walls: true, labels: true, transparent: true, sides: false, deviceColors: false, snap: true };
 
 root.innerHTML = `
   <div class="r3-app">
-    <div class="r3-location-bar"><label>LOCATION <select class="no-ts" id="r3-location" aria-label="Location 선택"></select></label><span id="r3-room-summary"></span><div class="r3-location-actions"><button class="r3-btn small" data-action="room">서버실 설정</button><button class="r3-btn small" data-action="reload">다시 불러오기</button><span id="r3-save-state" role="status">불러오는 중</span><button data-action="cancel" class="r3-btn small">취소</button><button data-action="save" class="r3-btn small primary">배치 저장</button></div></div>
+    <div class="r3-location-bar"><label>LOCATION <select class="no-ts" id="r3-location" aria-label="Location 선택"></select></label><label class="r3-check"><input type="checkbox" id="r3-only-rack-locations"> 랙이 배치된 Location만</label><span id="r3-room-summary"></span><div class="r3-location-actions"><button class="r3-btn small" data-action="room">서버실 설정</button><button class="r3-btn small" data-action="reload">다시 불러오기</button><span id="r3-save-state" role="status">불러오는 중</span><button data-action="cancel" class="r3-btn small">취소</button><button data-action="save" class="r3-btn small primary">배치 저장</button></div></div>
     <div id="r3-notice" role="status" aria-live="polite" hidden></div>
     <div class="r3-workspace">
-      <aside class="r3-library"><div class="r3-section-title"><h2>랙 라이브러리</h2><span id="r3-rack-count"></span></div><p class="r3-help">기존 랙을 화면으로 끌어다 배치하세요.</p><input id="r3-search" type="search" placeholder="랙 또는 서버 검색" aria-label="랙 또는 서버 검색"><label class="r3-check"><input type="checkbox" id="r3-show-placed"> 배치된 랙 포함</label><div id="r3-rack-list"></div><div class="r3-library-bottom"><span class="r3-eyebrow">ROOM OBJECTS</span><button data-action="add-block" class="r3-btn wide">＋ 장애물 블록</button><div id="r3-block-list"></div></div></aside>
+      <aside class="r3-library"><div class="r3-section-title"><h2>랙 라이브러리</h2><span id="r3-rack-count"></span></div><p class="r3-help">기존 랙을 화면으로 끌어다 배치하세요.</p><input id="r3-search" type="search" placeholder="랙 또는 서버 검색" aria-label="랙 또는 서버 검색"><label class="r3-check"><input type="checkbox" id="r3-show-placed"> 배치된 랙 포함</label><div id="r3-rack-list"></div><div class="r3-library-bottom"><span class="r3-eyebrow">ROOM OBJECTS</span><label>오브젝트 종류<select class="no-ts" id="r3-object-type" aria-label="오브젝트 종류">${Object.entries(objectTypes).map(([type, o]) => `<option value="${type}">${o.name}</option>`).join('')}</select></label><button data-action="add-block" class="r3-btn wide">＋ 룸 오브젝트 추가</button><div id="r3-block-list"></div></div></aside>
       <main class="r3-stage"><div class="r3-toolbar"><div class="r3-segment"><button data-action="view" data-view="3d" class="active">3D 보기</button><button data-action="view" data-view="top">평면 배치</button><button data-action="view" data-view="walk">워킹 모드</button></div><div class="r3-tools"><button data-action="fit" title="전체 보기">전체 보기</button><button data-action="undo" title="되돌리기">↶ 되돌리기</button><label><input id="r3-snap" type="checkbox" checked> 격자 맞춤</label></div></div><div id="r3-canvas"></div><div class="r3-stage-footer"><span id="r3-scene-stats"></span><span id="r3-controls-help">드래그 회전 · 우클릭 이동 · 휠 확대</span></div><div id="r3-invalid" role="alert" hidden></div></main>
       <aside id="r3-inspector" class="r3-inspector"></aside>
     </div>
-    <footer class="r3-footer"><span><i></i> ${api.demo ? '샘플 데이터 · 이 브라우저에 저장됩니다' : 'NetBox 인벤토리 · 레이아웃만 저장됩니다'}</span><div><label><input id="r3-grid" type="checkbox" checked> 격자</label><label><input id="r3-walls" type="checkbox" checked> 벽</label><label><input id="r3-labels" type="checkbox" checked> 이름</label><label><input id="r3-transparent" type="checkbox" checked> 투명 프레임</label></div></footer>
+    <footer class="r3-footer"><span><i></i> ${api.demo ? '샘플 데이터 · 이 브라우저에 저장됩니다' : 'NetBox 인벤토리 · 레이아웃만 저장됩니다'}</span><div><label><input id="r3-grid" type="checkbox" checked> 격자</label><label><input id="r3-walls" type="checkbox" checked> 벽</label><label><input id="r3-labels" type="checkbox" checked> 이름</label><label><input id="r3-transparent" type="checkbox" checked> 투명 프레임</label><label><input id="r3-sides" type="checkbox"> 랙 측면 덮개</label><label><input id="r3-deviceColors" type="checkbox"> 서버 상·하단 할당 색상</label></div></footer>
   </div>
   <dialog id="r3-room-dialog"><form id="r3-room-form"><div class="r3-dialog-title"><h2>서버실 기본 설정</h2><button type="button" class="r3-icon-button" data-action="close-room" aria-label="닫기">×</button></div><p>선택한 Location에 공간을 연결합니다. 모든 치수는 mm입니다.</p><label>서버실 이름<input name="name" required maxlength="100"></label><div class="r3-form-grid"><label>가로 (mm)<input type="number" name="width" min="500" max="100000" required></label><label>세로 (mm)<input type="number" name="depth" min="500" max="100000" required></label><label>높이 (mm)<input type="number" name="height" min="500" max="100000" required></label><label>격자 크기 (mm)<input type="number" name="grid" min="100" max="5000" required></label></div><label class="r3-check"><input name="include_descendants" type="checkbox"> 하위 Location의 랙 포함</label><p class="r3-help">공간을 줄이면 기존 배치가 경계를 벗어날 수 있습니다.</p><div class="r3-dialog-actions"><button type="button" data-action="close-room" class="r3-btn">닫기</button><button type="submit" class="r3-btn primary">설정 적용</button></div></form></dialog>`;
 const $ = selector => root.querySelector(selector);
@@ -33,6 +35,15 @@ function numberField(label, key, value, kind = 'placement', disabled = false, mi
   return `<label>${label}<input type="number" min="${min}" step="any" data-edit="${kind}" data-key="${key}" value="${esc(value)}" ${disabled || !canEdit() ? 'disabled' : ''}></label>`;
 }
 function link(url, text) { const safe = safeURL(url); return safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>` : `<span class="r3-help">샘플 장비</span>`; }
+function renderLocations() {
+  const visible = locations.filter(l => !onlyRackLocations || l.has_racks);
+  const currentVisible = visible.some(l => l.id === locationId);
+  const placeholder = !currentVisible ? `<option value="" disabled selected>${visible.length ? 'Location 선택 (현재 화면 유지)' : '조건에 맞는 Location이 없습니다'}</option>` : '';
+  $('#r3-location').innerHTML = placeholder + visible.map(l => `<option value="${l.id}">${esc(l.site)} / ${esc(l.name)}</option>`).join('');
+  if (currentVisible) $('#r3-location').value = String(locationId);
+  $('#r3-location').disabled = busy || !visible.length;
+  $('#r3-only-rack-locations').disabled = busy;
+}
 function render(keepInspector = false) {
   if (!data || !layout) return;
   const problems = errors(layout, data.racks);
@@ -42,7 +53,7 @@ function render(keepInspector = false) {
   $('[data-action=cancel]').disabled = busy || !dirty;
   $('[data-action=undo]').disabled = !canEdit() || !undo.length;
   $('[data-action=add-block]').disabled = !canEdit();
-  $('#r3-location').disabled = busy;
+  renderLocations();
   $('[data-action=room]').disabled = !canEdit();
   $('#r3-room-summary').textContent = `${layout.name} · ${layout.width / 1000} × ${layout.depth / 1000} m · ${layout.height / 1000} m 높이`;
   $('#r3-rack-count').textContent = `${data.racks.length}`;
@@ -66,7 +77,7 @@ function inspector() {
   if (selected?.blockId) {
     const b = layout.blocks.find(b => b.id === selected.blockId);
     if (!b) { selected = null; return inspector(); }
-    panel.innerHTML = `<div class="r3-section-title"><h2>장애물 블록</h2><span class="r3-tag">BLOCK</span></div><label>이름<input data-edit="block" data-key="name" value="${esc(b.name)}" maxlength="100" ${!canEdit() ? 'disabled' : ''}></label><div class="r3-form-grid">${numberField('X (mm)', 'x', b.x, 'block')}${numberField('Z (mm)', 'z', b.z, 'block')}${numberField('폭 (mm)', 'width', b.width, 'block', false, 100)}${numberField('깊이 (mm)', 'depth', b.depth, 'block', false, 100)}${numberField('높이 (mm)', 'height', b.height, 'block', false, 100)}</div><button data-action="remove-block" class="r3-btn danger wide" ${!canEdit() ? 'disabled' : ''}>블록 제거</button>`; return;
+    panel.innerHTML = `<div class="r3-section-title"><h2>${esc(objectTypes[b.type || 'pillar']?.name || '룸 오브젝트')}</h2><span class="r3-tag">BLOCK</span></div><label>이름<input data-edit="block" data-key="name" value="${esc(b.name)}" maxlength="100" ${!canEdit() ? 'disabled' : ''}></label><div class="r3-form-grid">${numberField('X (mm)', 'x', b.x, 'block')}${numberField('Z (mm)', 'z', b.z, 'block')}${numberField('폭 (mm)', 'width', b.width, 'block', false, 100)}${numberField('깊이 (mm)', 'depth', b.depth, 'block', false, 100)}${numberField('높이 (mm)', 'height', b.height, 'block', false, 100)}</div><label>방향<select data-edit="block" data-key="rotation" ${!canEdit() ? 'disabled' : ''}>${[0, 90, 180, 270].map(n => `<option value="${n}" ${n === (b.rotation || 0) ? 'selected' : ''}>${n}°</option>`).join('')}</select></label><p class="r3-help">평면 모드에서 드래그하거나 좌표를 입력하세요. 문은 닫힌 문으로 표시합니다.</p><button data-action="remove-block" class="r3-btn danger wide" ${!canEdit() ? 'disabled' : ''}>블록 제거</button>`; return;
   }
   const rack = data.racks.find(r => r.id === selected?.rackId);
   if (!rack) { panel.innerHTML = '<div class="r3-section-title"><h2>선택 정보</h2></div><div class="r3-inspector-empty"><span>◇</span><h3>공간을 구성해 보세요</h3><p>랙을 선택하면 위치와 치수를<br>조정하고 내부 장비를 확인할 수 있습니다.</p></div><div class="r3-tip"><strong>시작하기</strong><p>① 서버실 크기를 설정하세요.<br>② 평면 모드에서 랙을 배치하세요.<br>③ 3D로 앞뒤를 확인하고 저장하세요.</p></div>'; return; }
@@ -124,7 +135,18 @@ root.addEventListener('click', async e => {
     else if (action === 'room') { const form = $('#r3-room-form'); for (const key of ['name', 'width', 'depth', 'height', 'grid']) form.elements[key].value = layout[key]; form.elements.include_descendants.checked = layout.include_descendants; $('#r3-room-dialog').showModal(); }
     else if (action === 'close-room') $('#r3-room-dialog').close();
     else if (action === 'unplace' && canEdit()) { const placement = layout.placements.find(p => p.rack_id === selected.rackId); if (!placement.locked) { remember(); layout.placements = layout.placements.filter(p => p.rack_id !== selected.rackId); } }
-    else if (action === 'add-block' && canEdit()) { remember(); const id = crypto.randomUUID(); layout.blocks.push({ id, name: '기둥', x: snap(layout.width / 2, layout.grid), z: snap(layout.depth / 2, layout.grid), width: 600, depth: 600, height: layout.height }); selected = { blockId: id }; changed(); }
+    else if (action === 'add-block' && canEdit()) { const type = $('#r3-object-type').value, preset = objectTypes[type];
+      if (!preset) return;
+      const id = crypto.randomUUID(), block = { id, type, name: preset.name, rotation: 0, width: Math.min(preset.width, layout.width), depth: Math.min(preset.depth, layout.depth), height: Math.min(preset.height, layout.height), x: layout.width / 2, z: layout.depth / 2 };
+      let found = false;
+      for (let z = block.depth / 2; z <= layout.depth - block.depth / 2 && !found; z += Math.max(100, layout.grid, layout.depth / 80)) {
+        for (let x = block.width / 2; x <= layout.width - block.width / 2; x += Math.max(100, layout.grid, layout.width / 80)) {
+          block.x = x; block.z = z;
+          if (!errors({ ...layout, blocks: [...layout.blocks, block] }, data.racks).length) { found = true; break; }
+        }
+      }
+      if (!found) { block.x = layout.width / 2; block.z = layout.depth / 2; notice('빈 공간이 부족합니다. 좌표와 크기를 조정한 뒤 저장하세요.', true); }
+      remember(); layout.blocks.push(block); selected = { blockId: id }; changed(); }
     else if (action === 'remove-block' && canEdit()) { remember(); layout.blocks = layout.blocks.filter(b => b.id !== selected.blockId); selected = null; changed(); }
     else if (action === 'reset-appearance' && canEdit()) { remember(); delete layout.appearances[String(selected.deviceId)]; changed(); }
   } catch (error) { notice(error.message, true); }
@@ -133,6 +155,7 @@ root.addEventListener('click', async e => {
 root.addEventListener('input', e => { if (e.target.id === 'r3-search') { filter = e.target.value; render(); } });
 root.addEventListener('change', async e => {
   const el = e.target;
+  if (el.id === 'r3-only-rack-locations') { onlyRackLocations = el.checked; renderLocations(); return; }
   if (el.id === 'r3-location') { if (!dirty || window.confirm('저장하지 않은 변경을 버리고 Location을 전환할까요?')) await load(Number(el.value)); else el.value = String(locationId); return; }
   if (el.id === 'r3-show-placed') { showPlaced = el.checked; render(); return; }
   for (const key of Object.keys(opts)) if (el.id === `r3-${key}`) { opts[key] = el.checked; render(); return; }
@@ -173,6 +196,13 @@ async function start() {
     scene = new RoomScene($('#r3-canvas'), {
       exitWalk: () => { mode = '3d'; scene.view(mode, selected); render(); },
       walkError: () => notice('걸어 다닐 빈 공간이 없습니다. 서버실 배치를 확인하세요.', true),
+      selectBlock: blockId => { selected = { blockId }; render(); },
+      dragBlock: (id, x, z) => {
+        if (!canEdit()) return;
+        const b = layout.blocks.find(b => b.id === id); if (!b) return;
+        dragBefore ||= { layout: clone(layout), racks: data.racks };
+        b.x = snap(x, layout.grid, opts.snap); b.z = snap(z, layout.grid, opts.snap); selected = { blockId: id }; changed();
+      },
       select: (rackId, deviceId) => { selected = { rackId, deviceId }; render(); }, drop: place,
       drag: (id, x, z) => {
         if (!canEdit()) return;
@@ -182,7 +212,7 @@ async function start() {
       dragEnd: () => { if (dragBefore) { undo.push(dragBefore); dragBefore = null; render(); } },
       imageError: () => notice('일부 이미지를 불러오지 못해 해당 면을 장비 색상으로 표시합니다.', true),
     });
-    locations = await api.list(); $('#r3-location').innerHTML = locations.map(l => `<option value="${l.id}">${esc(l.site)} / ${esc(l.name)}</option>`).join('');
+    locations = await api.list(); renderLocations();
     if (!locations.length) { notice('조회할 수 있는 Location이 없습니다. NetBox의 Location과 권한을 확인하세요.', true); return; }
     const requested = Number(root.dataset.initialLocation || new URLSearchParams(window.location.search).get('location'));
     await load(locations.some(l => l.id === requested) ? requested : (locations.find(l => l.configured)?.id || locations[0].id));

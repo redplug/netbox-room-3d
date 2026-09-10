@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
-from dcim.models import Location
+from dcim.models import Location, Rack
 
 from .models import RoomLayout
 from .services import inventory, visible_scene
@@ -30,10 +30,11 @@ def viewer(request, pk=None):
 def locations(request):
     objects = Location.objects.restrict(request.user, 'view').select_related('site').order_by('site__name', 'name')
     rooms = {r.location_id: r for r in RoomLayout.objects.restrict(request.user, 'view')}
+    rack_locations = set(Rack.objects.restrict(request.user, 'view').exclude(location_id=None).order_by().values_list('location_id', flat=True))
     return JsonResponse({'locations': [{
         'id': loc.pk, 'name': loc.name, 'site': loc.site.name,
         'url': reverse('plugins:netbox_room_3d:location_scene', args=[loc.pk]),
-        'configured': loc.pk in rooms,
+        'configured': loc.pk in rooms, 'has_racks': loc.pk in rack_locations,
     } for loc in objects]})
 
 

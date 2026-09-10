@@ -5,11 +5,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import Client, TestCase
 from django.urls import reverse
-from dcim.models import Device, DeviceRole, DeviceType, Location, Manufacturer, Rack, Site
+from dcim.models import Device, DeviceRole, DeviceType, Interface, Location, Manufacturer, Rack, Site
+from ipam.models import IPAddress
 from users.models import ObjectPermission
 
 from .models import RoomLayout
-from .services import rack_data
+from .services import inventory, rack_data
 from .validation import SceneError, validate_scene
 
 
@@ -41,6 +42,71 @@ class RoomAPITest(TestCase):
     def setUp(self):
         self.client.force_login(self.admin)
         self.url = reverse('plugins:netbox_room_3d:location_scene', args=[self.location.pk])
+
+    def test_network_metadata_respects_object_permissions(self):
+        port = Interface.objects.create(device=self.device, name='eth0', type='1000base-t')
+        ip = IPAddress.objects.create(address='192.0.2.10/24')
+        ip.assigned_object = port
+        ip.save()
+        other_port = Interface.objects.create(device=self.device, name='eth1', type='1000base-t')
+        self.device.primary_ip4 = ip
+        self.device.save()
+        row = inventory(self.admin, self.location)[self.rack.pk]['devices'][0]
+        self.assertEqual(row['interfaces'], [{'id': port.pk, 'name': 'eth0', 'is_primary': True, 'primary_ips': ['192.0.2.10/24']},
+                                             {'id': other_port.pk, 'name': 'eth1', 'is_primary': False, 'primary_ips': []}])
+        self.assertEqual(row['primary_ips'], ['192.0.2.10/24'])
+
+        self.grant(Rack, ['view']); self.grant(Device, ['view'])
+        row = inventory(self.reader, self.location)[self.rack.pk]['devices'][0]
+        self.assertEqual(row['interfaces'], [])
+        self.assertEqual(row['primary_ips'], [])
+        self.grant(Interface, ['view']); self.grant(IPAddress, ['view'])
+        row = inventory(get_user_model().objects.get(pk=self.reader.pk), self.location)[self.rack.pk]['devices'][0]
+        self.assertEqual(len(row['interfaces']), 2)
+        self.assertEqual(row['primary_ips'], ['192.0.2.10/24'])
+
+    def test_multiple_primary_ips_map_to_their_own_interfaces(self):
+        p4 = Interface.objects.create(device=self.device, name='nic-1', type='1000base-t')
+        p6 = Interface.objects.create(device=self.device, name='nic-2', type='1000base-t')
+        ip4 = IPAddress(address='192.0.2.20/24', assigned_object=p4); ip4.save()
+        ip6 = IPAddress(address='2001:db8::20/64', assigned_object=p6); ip6.save()
+        self.device.primary_ip4 = ip4; self.device.primary_ip6 = ip6; self.device.save()
+        row = inventory(self.admin, self.location)[self.rack.pk]['devices'][0]
+        self.assertEqual(row['interfaces'][0]['primary_ips'], ['192.0.2.20/24'])
+        self.assertEqual(row['interfaces'][1]['primary_ips'], ['2001:db8::20/64'])
+
+    def test_room_object_types_round_trip_and_validation(self):
+        for kind in ('pillar', 'ups', 'cooling', 'battery', 'desk', 'door', 'glass', 'wall', 'solid'):
+            payload = copy.deepcopy(self.payload)
+            payload['blocks'] = [{'id': 'object1', 'name': kind, 'type': kind,
+                                  'x': 5000, 'z': 5000, 'width': 1000, 'depth': 200,
+                                  'height': 2000, 'rotation': 90}]
+            payload['revision'] = RoomLayout.objects.filter(location=self.location).values_list('revision', flat=True).first() or 0
+            response = self.client.put(self.url, data=json.dumps(payload), content_type='application/json')
+            self.assertEqual(response.status_code, 200, response.content)
+            block = self.client.get(self.url).json()['layout']['blocks'][0]
+            self.assertEqual(block['type'], kind)
+            self.assertEqual(block['rotation'], 90)
+        payload['revision'] = RoomLayout.objects.get(location=self.location).revision
+        payload['blocks'][0]['type'] = 'unsupported'
+        self.assertEqual(self.client.put(self.url, data=json.dumps(payload), content_type='application/json').status_code, 400)
+        payload['blocks'][0]['type'] = 'ups'
+        payload['blocks'][0]['rotation'] = 45
+        self.assertEqual(self.client.put(self.url, data=json.dumps(payload), content_type='application/json').status_code, 400)
+
+    def test_location_filter_uses_visible_assigned_racks(self):
+        empty = Location.objects.create(site=self.site, name='Empty', slug='empty')
+        url = reverse('plugins:netbox_room_3d:locations')
+        rows = {row['id']: row for row in self.client.get(url).json()['locations']}
+        self.assertTrue(rows[self.location.pk]['has_racks'])
+        self.assertFalse(rows[self.location.pk]['configured'])
+        self.assertFalse(rows[empty.pk]['has_racks'])
+        self.grant(Location, ['view'])
+        self.grant(Rack, ['view'], {'id': self.foreign.pk})
+        self.client.force_login(self.reader)
+        rows = {row['id']: row for row in self.client.get(url).json()['locations']}
+        self.assertFalse(rows[self.location.pk]['has_racks'])
+        self.assertTrue(rows[self.other.pk]['has_racks'])
 
     def save(self, payload=None):
         return self.client.put(self.url, json.dumps(payload or self.payload), content_type='application/json')

@@ -15,6 +15,8 @@ export function demoData(id = 1) {
       status: 'active', color: n < 2 ? '#3b82f6' : ['#0d9488', '#64748b', '#8b5cf6'][i % 3],
       front_image: n === 2 || n === 3 ? panel() : null,
       rear_image: n === 2 ? panel(true) : null, images: [], url: '',
+      interfaces: n >= 2 ? [{ id: n * 2, name: 'eth0' }, { id: n * 2 + 1, name: 'eth1' }] : [],
+      primary_ips: n >= 2 ? [`192.0.2.${10 + n}/24`] : [],
     })),
   }));
   return {

@@ -12,7 +12,7 @@ export class API {
     return data;
   }
   async list() {
-    this.locations = this.demo ? [{ id: 1, site: 'DEMO IDC', name: '서버실 A' }, { id: 2, site: 'DEMO IDC', name: '네트워크실 B' }] : (await this.request(this.url)).locations;
+    this.locations = this.demo ? [{ id: 1, site: 'DEMO IDC', name: '서버실 A', has_racks: true }, { id: 2, site: 'DEMO IDC', name: '네트워크실 B', has_racks: true }] : (await this.request(this.url)).locations;
     return this.locations;
   }
   async load(id, descendants) {
