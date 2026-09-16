@@ -39,8 +39,8 @@ export function deviceBottom(rack, device) {
   if (offset < 0 || offset + device.u_height > rack.u_height) return null;
   return (rack.desc_units ? rack.u_height - offset - device.u_height : offset) * U;
 }
-export function snap(value, grid, enabled = true) {
-  return enabled ? Math.round(value / grid) * grid : Math.round(value);
+export function snap(value, grid, enabled = true, origin = 0) {
+  return enabled ? origin + Math.round((value - origin) / grid) * grid : Math.round(value);
 }
 export function safeURL(value) {
   if (!value) return '';

@@ -3,7 +3,7 @@ import './style.css';
 import { objectTypes } from './objects.js';
 import { API } from './api.js';
 import { RoomScene } from './scene.js';
-import { dimensions, deviceBottom, errors, safeURL, snap } from './geometry.js';
+import { dimensions, deviceBottom, errors, footprint, safeURL, snap } from './geometry.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clone = value => structuredClone(value);
@@ -23,7 +23,7 @@ root.innerHTML = `
       <main class="r3-stage"><div class="r3-toolbar"><div class="r3-segment"><button data-action="view" data-view="3d" class="active">3D 보기</button><button data-action="view" data-view="top">평면 배치</button><button data-action="view" data-view="walk">워킹 모드</button></div><div class="r3-tools"><button data-action="fit" title="전체 보기">전체 보기</button><button data-action="undo" title="되돌리기">↶ 되돌리기</button><label><input id="r3-snap" type="checkbox" checked> 격자 맞춤</label></div></div><div id="r3-canvas"></div><div class="r3-stage-footer"><span id="r3-scene-stats"></span><span id="r3-controls-help">드래그 회전 · 우클릭 이동 · 휠 확대</span></div><div id="r3-invalid" role="alert" hidden></div></main>
       <aside id="r3-inspector" class="r3-inspector"></aside>
     </div>
-    <footer class="r3-footer"><span><i></i> ${api.demo ? '샘플 데이터 · 이 브라우저에 저장됩니다' : 'NetBox 인벤토리 · 레이아웃만 저장됩니다'}</span><div><label><input id="r3-units" type="checkbox" checked> U 번호·빈 슬롯</label><label><input id="r3-usage" type="checkbox" checked> 사용 현황</label><label><input id="r3-statuses" type="checkbox" checked> 상태 표시</label><label><input id="r3-grid" type="checkbox" checked> 격자 표시</label><label>한 칸 (mm)<input id="r3-grid-size" type="number" min="100" max="5000" step="1" required aria-label="격자 한 칸 (mm)"></label><label><input id="r3-walls" type="checkbox" checked> 벽</label><label><input id="r3-labels" type="checkbox" checked> 이름</label><label><input id="r3-transparent" type="checkbox" checked> 투명 프레임</label><label><input id="r3-sides" type="checkbox"> 랙 측면 덮개</label><label><input id="r3-deviceColors" type="checkbox"> 서버 상·하단 할당 색상</label></div></footer>
+    <footer class="r3-footer"><span><i></i> ${api.demo ? '샘플 데이터 · 이 브라우저에 저장됩니다' : 'NetBox 인벤토리 · 레이아웃만 저장됩니다'}</span><div><label><input id="r3-units" type="checkbox" checked> U 번호·빈 슬롯</label><label><input id="r3-usage" type="checkbox" checked> 사용 현황</label><label><input id="r3-statuses" type="checkbox" checked> 상태 표시</label><label><input id="r3-grid" type="checkbox" checked> 격자 표시</label><label>한 칸 (mm)<input id="r3-grid-size" type="number" min="100" max="5000" step="1" required aria-label="격자 한 칸 (mm)"></label><label>격자 시작<select class="no-ts" id="r3-grid-origin" aria-label="격자 배치 시작 위치"><option value="top-left">좌상</option><option value="bottom-left">좌하</option><option value="top-right">우상</option><option value="bottom-right">우하</option></select></label><label><input id="r3-walls" type="checkbox" checked> 벽</label><label><input id="r3-labels" type="checkbox" checked> 이름</label><label><input id="r3-transparent" type="checkbox" checked> 투명 프레임</label><label><input id="r3-sides" type="checkbox"> 랙 측면 덮개</label><label><input id="r3-deviceColors" type="checkbox"> 서버 상·하단 할당 색상</label></div></footer>
   </div>
   <dialog id="r3-room-dialog"><form id="r3-room-form"><div class="r3-dialog-title"><h2>서버실 기본 설정</h2><button type="button" class="r3-icon-button" data-action="close-room" aria-label="닫기">×</button></div><p>선택한 Location에 공간을 연결합니다. 모든 치수는 mm입니다.</p><label>서버실 이름<input name="name" required maxlength="100"></label><div class="r3-form-grid"><label>가로 (mm)<input type="number" name="width" min="500" max="100000" required></label><label>세로 (mm)<input type="number" name="depth" min="500" max="100000" required></label><label>높이 (mm)<input type="number" name="height" min="500" max="100000" required></label><label>격자 크기 (mm)<input type="number" name="grid" min="100" max="5000" required></label></div><label class="r3-check"><input name="include_descendants" type="checkbox"> 하위 Location의 랙 포함</label><p class="r3-help">공간을 줄이면 기존 배치가 경계를 벗어날 수 있습니다.</p><div class="r3-dialog-actions"><button type="button" data-action="close-room" class="r3-btn">닫기</button><button type="submit" class="r3-btn primary">설정 적용</button></div></form></dialog>`;
 const $ = selector => root.querySelector(selector);
@@ -48,6 +48,44 @@ function setBusy(value) { busy = value; render(); }
 function numberField(label, key, value, kind = 'placement', disabled = false, min = 0) {
   return `<label>${label}<input type="number" min="${min}" step="any" data-edit="${kind}" data-key="${key}" value="${esc(value)}" ${disabled || !canEdit() ? 'disabled' : ''}></label>`;
 }
+function uniqueBlockName(name) {
+  const base = `${name} 복사본`, names = new Set(layout.blocks.map(b => b.name));
+  if (!names.has(base)) return base;
+  for (let i = 2; ; i++) if (!names.has(`${base} ${i}`)) return `${base} ${i}`;
+}
+function snapCoordinate(value, axis) {
+  const origin = layout.grid_origin || 'top-left';
+  const farEdge = axis === 'x' ? origin.endsWith('right') : origin.startsWith('bottom');
+  return snap(value, layout.grid, opts.snap, farEdge ? layout[axis === 'x' ? 'width' : 'depth'] : 0);
+}
+function topLeft(item) {
+  const bounds = footprint(item);
+  return { x: bounds[0], z: bounds[1] };
+}
+function snapItem(item, x, z) {
+  const bounds = footprint({ ...item, x, z });
+  return { x: x + snapCoordinate(bounds[0], 'x') - bounds[0], z: z + snapCoordinate(bounds[1], 'z') - bounds[1] };
+}
+function findBlockSpace(block, origin = null) {
+  const valid = (x, z) => {
+    ({ x: block.x, z: block.z } = snapItem(block, x, z));
+    return !errors({ ...layout, blocks: [...layout.blocks, block] }, data.racks).length;
+  };
+  const step = Math.max(100, layout.grid);
+  if (origin) {
+    for (let radius = 1; radius <= 12; radius++) {
+      for (let dz = -radius; dz <= radius; dz++) for (const dx of [-radius, radius]) if (valid(origin.x + dx * step, origin.z + dz * step)) return true;
+      for (let dx = -radius + 1; dx < radius; dx++) for (const dz of [-radius, radius]) if (valid(origin.x + dx * step, origin.z + dz * step)) return true;
+    }
+  }
+  const scan = Math.max(100, layout.grid, layout.width / 80, layout.depth / 80);
+  const values = (size, half, reverse) => { const result = []; for (let value = half; value <= size - half; value += scan) result.push(value); return reverse ? result.reverse() : result; };
+  const gridOrigin = layout.grid_origin || 'top-left';
+  for (const z of values(layout.depth, block.depth / 2, gridOrigin.startsWith('bottom'))) {
+    for (const x of values(layout.width, block.width / 2, gridOrigin.endsWith('right'))) if (valid(x, z)) return true;
+  }
+  return false;
+}
 function link(url, text) { const safe = safeURL(url); return safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>` : `<span class="r3-help">샘플 장비</span>`; }
 function renderLocations() {
   const visible = locations.filter(l => !onlyRackLocations || l.has_racks);
@@ -62,6 +100,7 @@ function render(keepInspector = false, syncScene = true) {
   if (!data || !layout) return;
   const problems = errors(layout, data.racks);
   $('#r3-grid-size').value = layout.grid; $('#r3-grid-size').disabled = !canEdit();
+  $('#r3-grid-origin').value = layout.grid_origin || 'top-left'; $('#r3-grid-origin').disabled = !canEdit();
   $('#r3-save-state').textContent = !data.can_edit ? '읽기 전용' : busy ? '처리 중…' : dirty ? '저장하지 않은 변경' : `저장됨 · v${layout.revision}`;
   $('#r3-save-state').className = dirty ? 'unsaved' : '';
   $('[data-action=save]').disabled = !canEdit() || !dirty || problems.length > 0;
@@ -97,15 +136,17 @@ function inspector() {
   if (selected?.blockId) {
     const b = layout.blocks.find(b => b.id === selected.blockId);
     if (!b) { selected = null; return inspector(); }
-    panel.innerHTML = `<div class="r3-section-title"><h2>${esc(objectTypes[b.type || 'pillar']?.name || '룸 오브젝트')}</h2><span class="r3-tag">BLOCK</span></div><label>이름<input data-edit="block" data-key="name" value="${esc(b.name)}" maxlength="100" ${!canEdit() ? 'disabled' : ''}></label><div class="r3-form-grid">${numberField('X (mm)', 'x', b.x, 'block')}${numberField('Z (mm)', 'z', b.z, 'block')}${numberField('폭 (mm)', 'width', b.width, 'block', false, 100)}${numberField('깊이 (mm)', 'depth', b.depth, 'block', false, 100)}${numberField('높이 (mm)', 'height', b.height, 'block', false, 100)}</div><label>방향<select data-edit="block" data-key="rotation" ${!canEdit() ? 'disabled' : ''}>${[0, 90, 180, 270].map(n => `<option value="${n}" ${n === (b.rotation || 0) ? 'selected' : ''}>${n}°</option>`).join('')}</select></label><p class="r3-help">평면 모드에서 드래그하거나 좌표를 입력하세요. 문은 닫힌 문으로 표시합니다.</p><button data-action="remove-block" class="r3-btn danger wide" ${!canEdit() ? 'disabled' : ''}>블록 제거</button>`; return;
+    const position = topLeft(b);
+    panel.innerHTML = `<div class="r3-section-title"><h2>${esc(objectTypes[b.type || 'pillar']?.name || '룸 오브젝트')}</h2><span class="r3-tag">BLOCK</span></div><label>이름<input data-edit="block" data-key="name" value="${esc(b.name)}" maxlength="100" ${!canEdit() ? 'disabled' : ''}></label><div class="r3-form-grid">${numberField('좌측 X (mm)', 'x', position.x, 'block')}${numberField('상단 Z (mm)', 'z', position.z, 'block')}${numberField('폭 (mm)', 'width', b.width, 'block', false, 100)}${numberField('깊이 (mm)', 'depth', b.depth, 'block', false, 100)}${numberField('높이 (mm)', 'height', b.height, 'block', false, 100)}</div><label>방향<select data-edit="block" data-key="rotation" ${!canEdit() ? 'disabled' : ''}>${[0, 90, 180, 270].map(n => `<option value="${n}" ${n === (b.rotation || 0) ? 'selected' : ''}>${n}°</option>`).join('')}</select></label><p class="r3-help">좌표는 오브젝트의 좌측 상단 기준입니다. 평면 모드에서 드래그하거나 좌표를 입력하세요.</p><button data-action="duplicate-block" class="r3-btn wide" ${!canEdit() ? 'disabled' : ''}>오브젝트 복사</button><button data-action="remove-block" class="r3-btn danger wide" ${!canEdit() ? 'disabled' : ''}>블록 제거</button>`; return;
   }
   const rack = data.racks.find(r => r.id === selected?.rackId);
   if (!rack) { panel.innerHTML = '<div class="r3-section-title"><h2>선택 정보</h2></div><div class="r3-inspector-empty"><span>◇</span><h3>공간을 구성해 보세요</h3><p>랙을 선택하면 위치와 치수를<br>조정하고 내부 장비를 확인할 수 있습니다.</p></div><div class="r3-tip"><strong>시작하기</strong><p>① 서버실 크기를 설정하세요.<br>② 평면 모드에서 랙을 배치하세요.<br>③ 3D로 앞뒤를 확인하고 저장하세요.</p></div>'; return; }
   const placement = layout.placements.find(p => p.rack_id === rack.id), dims = dimensions(rack, placement);
   const device = rack.devices.find(d => d.id === selected.deviceId);
   const unmanaged = rack.devices.filter(d => deviceBottom(rack, d) == null);
+  const rackPosition = placement ? topLeft({ ...placement, ...dims }) : null;
   panel.innerHTML = `<div class="r3-section-title"><h2>${esc(rack.name)}</h2><span class="r3-tag">${rack.u_height}U</span></div>${link(rack.url, 'NetBox 랙 상세')}<div class="r3-view-buttons"><button data-action="front" ${!placement ? 'disabled' : ''}>전면 보기</button><button data-action="rear" ${!placement ? 'disabled' : ''}>후면 보기</button></div>
-    ${placement ? `<div class="r3-subtitle">배치 좌표 <label class="r3-check"><input type="checkbox" data-edit="placement" data-key="locked" ${placement.locked ? 'checked' : ''} ${!canEdit() ? 'disabled' : ''}> 잠금</label></div><div class="r3-form-grid">${numberField('X (mm)', 'x', placement.x, 'placement', placement.locked)}${numberField('Z (mm)', 'z', placement.z, 'placement', placement.locked)}</div><label>방향<select data-edit="placement" data-key="rotation" ${placement.locked || !canEdit() ? 'disabled' : ''}>${[0, 90, 180, 270].map(n => `<option value="${n}" ${n === placement.rotation ? 'selected' : ''}>${n}°</option>`).join('')}</select></label><details><summary>랙 표시 치수 보정</summary><p class="r3-help">원본 랙 치수는 변경되지 않습니다.${rack.estimated.length ? ' 일부 치수는 추정값입니다.' : ''}</p><div class="r3-form-grid">${numberField('폭 (mm)', 'width', dims.width, 'dimensions', placement.locked, 100)}${numberField('깊이 (mm)', 'depth', dims.depth, 'dimensions', placement.locked, 100)}${numberField('높이 (mm)', 'height', dims.height, 'dimensions', placement.locked, 100)}</div></details><button data-action="unplace" class="r3-btn danger wide" ${placement.locked || !canEdit() ? 'disabled' : ''}>배치 해제</button>` : `<p class="r3-help">아직 배치되지 않은 랙입니다.</p><button data-action="place" data-id="${rack.id}" class="r3-btn primary wide" ${!canEdit() ? 'disabled' : ''}>서버실에 배치</button>`}
+    ${placement ? `<div class="r3-subtitle">배치 좌표 · 좌측 상단 기준 <label class="r3-check"><input type="checkbox" data-edit="placement" data-key="locked" ${placement.locked ? 'checked' : ''} ${!canEdit() ? 'disabled' : ''}> 잠금</label></div><div class="r3-form-grid">${numberField('좌측 X (mm)', 'x', rackPosition.x, 'placement', placement.locked)}${numberField('상단 Z (mm)', 'z', rackPosition.z, 'placement', placement.locked)}</div><label>방향<select data-edit="placement" data-key="rotation" ${placement.locked || !canEdit() ? 'disabled' : ''}>${[0, 90, 180, 270].map(n => `<option value="${n}" ${n === placement.rotation ? 'selected' : ''}>${n}°</option>`).join('')}</select></label><details><summary>랙 표시 치수 보정</summary><p class="r3-help">원본 랙 치수는 변경되지 않습니다.${rack.estimated.length ? ' 일부 치수는 추정값입니다.' : ''}</p><div class="r3-form-grid">${numberField('폭 (mm)', 'width', dims.width, 'dimensions', placement.locked, 100)}${numberField('깊이 (mm)', 'depth', dims.depth, 'dimensions', placement.locked, 100)}${numberField('높이 (mm)', 'height', dims.height, 'dimensions', placement.locked, 100)}</div></details><button data-action="unplace" class="r3-btn danger wide" ${placement.locked || !canEdit() ? 'disabled' : ''}>배치 해제</button>` : `<p class="r3-help">아직 배치되지 않은 랙입니다.</p><button data-action="place" data-id="${rack.id}" class="r3-btn primary wide" ${!canEdit() ? 'disabled' : ''}>서버실에 배치</button>`}
     <div class="r3-subtitle">장비 <span>${rack.devices.length}</span></div>${rack.desc_units ? '<p class="r3-help">U 번호: 위에서 아래로 증가</p>' : ''}${unmanaged.length ? `<p class="r3-warning">위치 없음·0U·범위 초과 ${unmanaged.length}개: 목록에서만 표시</p>` : ''}<div class="r3-devices">${rack.devices.filter(d => !opts.statusFilter || d.status === opts.statusFilter).map(d => `<button data-action="device" data-id="${d.id}" class="r3-device ${device?.id === d.id ? 'active' : ''}"><i style="background:${esc(layout.appearances[String(d.id)]?.color || d.color)}"></i><span>${esc(d.name)}<small>${esc(d.model)}</small></span><b>${d.position == null ? '—' : 'U' + d.position}</b></button>`).join('') || '<p class="r3-help">장비가 없습니다.</p>'}</div>${device ? deviceInspector(device) : '<p class="r3-help">장비를 선택하면 이미지와 색상을 설정할 수 있습니다.</p>'}`;
 }
 function deviceInspector(d) {
@@ -132,7 +173,7 @@ async function load(id) {
 }
 function place(id, x = layout.width / 2, z = layout.depth / 2, renderAfter = true) {
   if (!canEdit() || !data.racks.some(r => r.id === id) || layout.placements.some(p => p.rack_id === id)) return;
-  remember(); layout.placements.push({ rack_id: id, x: snap(x, layout.grid, opts.snap), z: snap(z, layout.grid, opts.snap), rotation: 0, locked: false, dimensions: {} });
+  remember(); layout.placements.push({ rack_id: id, x: snapCoordinate(x, 'x'), z: snapCoordinate(z, 'z'), rotation: 0, locked: false, dimensions: {} });
   selected = { rackId: id }; if (renderAfter) changed(); notice('랙을 배치했습니다. 평면 모드에서 위치를 조정한 뒤 저장하세요.');
 }
 root.addEventListener('dragstart', e => { const card = e.target.closest('[data-rack]'); if (card) { e.dataTransfer.setData('text/plain', card.dataset.rack); e.dataTransfer.effectAllowed = 'copy'; } });
@@ -159,15 +200,16 @@ root.addEventListener('click', async e => {
     else if (action === 'add-block' && canEdit()) { const type = $('#r3-object-type').value, preset = objectTypes[type];
       if (!preset) return;
       const id = crypto.randomUUID(), block = { id, type, name: preset.name, rotation: 0, width: Math.min(preset.width, layout.width), depth: Math.min(preset.depth, layout.depth), height: Math.min(preset.height, layout.height), x: layout.width / 2, z: layout.depth / 2 };
-      let found = false;
-      for (let z = block.depth / 2; z <= layout.depth - block.depth / 2 && !found; z += Math.max(100, layout.grid, layout.depth / 80)) {
-        for (let x = block.width / 2; x <= layout.width - block.width / 2; x += Math.max(100, layout.grid, layout.width / 80)) {
-          block.x = x; block.z = z;
-          if (!errors({ ...layout, blocks: [...layout.blocks, block] }, data.racks).length) { found = true; break; }
-        }
-      }
+      const found = findBlockSpace(block);
       if (!found) { block.x = layout.width / 2; block.z = layout.depth / 2; notice('빈 공간이 부족합니다. 좌표와 크기를 조정한 뒤 저장하세요.', true); }
       remember(); layout.blocks.push(block); selected = { blockId: id }; }
+    else if (action === 'duplicate-block' && canEdit()) {
+      const source = layout.blocks.find(b => b.id === selected.blockId); if (!source) return;
+      const copy = { ...clone(source), id: crypto.randomUUID(), name: uniqueBlockName(source.name) };
+      const found = findBlockSpace(copy, source);
+      if (!found) { copy.x = source.x; copy.z = source.z; notice('복사할 빈 공간이 부족합니다. 복사본의 좌표를 조정한 뒤 저장하세요.', true); }
+      remember(); layout.blocks.push(copy); selected = { blockId: copy.id };
+    }
     else if (action === 'remove-block' && canEdit()) { remember(); layout.blocks = layout.blocks.filter(b => b.id !== selected.blockId); selected = null; }
     else if (action === 'reset-appearance' && canEdit()) { remember(); delete layout.appearances[String(selected.deviceId)]; }
   } catch (error) { notice(error.message, true); }
@@ -189,6 +231,11 @@ root.addEventListener('change', async e => {
     if (value !== layout.grid) { remember(); layout.grid = value; changed(); notice('격자 크기를 적용했습니다. 배치 저장을 누르면 유지됩니다.'); }
     return;
   }
+  if (el.id === 'r3-grid-origin') {
+    if (!canEdit() || !['top-left', 'bottom-left', 'top-right', 'bottom-right'].includes(el.value)) { render(); return; }
+    if (el.value !== (layout.grid_origin || 'top-left')) { remember(); layout.grid_origin = el.value; changed(); notice('격자 시작 위치를 적용했습니다. 기존 배치 좌표는 유지됩니다.'); }
+    return;
+  }
   if (el.id === 'r3-status-filter') { opts.statusFilter = el.value; render(); return; }
   if (el.id === 'r3-only-rack-locations') { onlyRackLocations = el.checked; renderLocations(); return; }
   if (el.id === 'r3-location') { if (!dirty || window.confirm('저장하지 않은 변경을 버리고 Location을 전환할까요?')) await load(Number(el.value)); else el.value = String(locationId); return; }
@@ -199,9 +246,20 @@ root.addEventListener('change', async e => {
   let value = el.type === 'checkbox' ? el.checked : el.type === 'number' || el.tagName === 'SELECT' ? el.value === '' ? null : Number(el.value) : el.value;
   if (el.type === 'number' && ((el.value === '' && kind !== 'appearance') || (el.value !== '' && (!el.validity.valid || !Number.isFinite(value))))) { notice('치수와 좌표 범위를 확인하세요.', true); render(); return; }
   remember();
-  if (kind === 'block') layout.blocks.find(b => b.id === selected.blockId)[key] = value;
+  if (kind === 'block') {
+    const b = layout.blocks.find(b => b.id === selected.blockId), before = topLeft(b);
+    if (key === 'x' || key === 'z') b[key] += value - before[key];
+    else { b[key] = value; if (['width', 'depth', 'rotation'].includes(key)) { const after = topLeft(b); b.x += before.x - after.x; b.z += before.z - after.z; } }
+  }
   else if (kind === 'appearance') { const a = layout.appearances[String(selected.deviceId)] ||= {}; if (value == null) delete a[key]; else a[key] = value; }
-  else { const p = layout.placements.find(p => p.rack_id === selected.rackId); if (p.locked && key !== 'locked') return; if (kind === 'dimensions') p.dimensions[key] = value; else p[key] = value; }
+  else {
+    const p = layout.placements.find(p => p.rack_id === selected.rackId); if (p.locked && key !== 'locked') return;
+    const rack = data.racks.find(r => r.id === selected.rackId), before = topLeft({ ...p, ...dimensions(rack, p) });
+    if (kind === 'dimensions') p.dimensions[key] = value;
+    else if (key === 'x' || key === 'z') p[key] += value - before[key];
+    else p[key] = value;
+    if (kind === 'dimensions' && ['width', 'depth'].includes(key) || kind === 'placement' && key === 'rotation') { const after = topLeft({ ...p, ...dimensions(rack, p) }); p.x += before.x - after.x; p.z += before.z - after.z; }
+  }
   if (kind === 'appearance' && key === 'color') root.querySelectorAll('.r3-face-preview > div').forEach(preview => { preview.style.background = value; });
   // Keep the focused form nodes alive while a blur/change moves into the next field.
   changed(el.type === 'number' || el.type === 'color' || kind === 'block' && key === 'name');
@@ -237,13 +295,13 @@ async function start() {
         if (!canEdit()) return;
         const b = layout.blocks.find(b => b.id === id); if (!b) return;
         dragBefore ||= { layout: clone(layout), racks: data.racks };
-        b.x = snap(x, layout.grid, opts.snap); b.z = snap(z, layout.grid, opts.snap); selected = { blockId: id }; dirty = true; scene.movePlacement('block', id, b);
+        ({ x: b.x, z: b.z } = snapItem(b, x, z)); selected = { blockId: id }; dirty = true; scene.movePlacement('block', id, b);
       },
       select: (rackId, deviceId) => { selected = { rackId, deviceId }; render(); }, drop: place,
       drag: (id, x, z) => {
         if (!canEdit()) return;
         const p = layout.placements.find(p => p.rack_id === id); if (p.locked) return;
-        dragBefore ||= { layout: clone(layout), racks: data.racks }; p.x = snap(x, layout.grid, opts.snap); p.z = snap(z, layout.grid, opts.snap); selected = { rackId: id }; dirty = true; scene.movePlacement('rack', id, p);
+        dragBefore ||= { layout: clone(layout), racks: data.racks }; ({ x: p.x, z: p.z } = snapItem({ ...p, ...dimensions(data.racks.find(r => r.id === id), p) }, x, z)); selected = { rackId: id }; dirty = true; scene.movePlacement('rack', id, p);
       },
       dragEnd: () => { if (dragBefore) { if (JSON.stringify(layout) !== JSON.stringify(dragBefore.layout)) { undo.push(dragBefore); if (undo.length > 30) undo.shift(); } dragBefore = null; } changed(); },
       dragCancel: () => { if (dragBefore) { layout = dragBefore.layout; dragBefore = null; } changed(); },

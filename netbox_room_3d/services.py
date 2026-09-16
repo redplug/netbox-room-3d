@@ -88,6 +88,7 @@ def visible_scene(room, racks):
     appearances = scene.get('appearances', {})
     scene['placements'] = [p for p in placements if p['rack_id'] in racks]
     scene['appearances'] = {k: v for k, v in appearances.items() if k in device_ids}
+    scene.setdefault('grid_origin', 'top-left')
     scene.setdefault('blocks', [])
     complete = len(placements) == len(scene['placements']) and len(appearances) == len(scene['appearances'])
     return scene, complete

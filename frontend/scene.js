@@ -130,7 +130,18 @@ export class RoomScene {
   }
   flushDraw() {
     if (this.disposed) return;
-    this.renderer.render(this.scene, this.camera); this.labels.render(this.scene, this.camera);
+    this.renderer.render(this.scene, this.camera); this.sizeLabels(); this.labels.render(this.scene, this.camera);
+  }
+  sizeLabels() {
+    const pixels = this.host.clientWidth;
+    for (const node of this.rackNodes?.values() || []) {
+      if (!node.nameLabel) continue;
+      const center = node.nameLabel.getWorldPosition(new THREE.Vector3());
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).multiplyScalar(node.labelWidth / 2);
+      const a = center.clone().sub(right).project(this.camera), b = center.add(right).project(this.camera);
+      node.nameLabel.element.style.maxWidth = `${Math.max(18, Math.min(180, Math.abs(b.x - a.x) * pixels / 2 - 6))}px`;
+      node.nameLabel.element.classList.toggle('top-summary', this.mode === 'top');
+    }
   }
   point(e) {
     // Input may arrive before the scheduled render after a camera/view change.
@@ -391,7 +402,7 @@ export class RoomScene {
       if (!this.walkFree(p.x, p.z)) { const start = this.walkStart(); if (start) p.copy(start); else { this.handlers.exitWalk(); this.handlers.walkError(); return; } }
       p.y = Math.min(1.65, m(layout.height) - .1);
     }
-    const envKey = JSON.stringify([layout.width, layout.depth, layout.height, layout.grid, opts.grid, opts.walls]);
+    const envKey = JSON.stringify([layout.width, layout.depth, layout.height, layout.grid, layout.grid_origin, opts.grid, opts.walls]);
     if (this.envKey !== envKey) {
       this.disposeGroup(this.environment); this.environment = buildRoom.call(this, layout, opts); this.envKey = envKey;
     }
@@ -456,6 +467,6 @@ export class RoomScene {
     else this.camera.position.set(center.x + span * .8, span * .8, center.z + span * .85);
     this.controls.target.copy(center); this.controls.update();
     this.camera.updateMatrixWorld(); this.scene.updateMatrixWorld(true);
-    this.labels.render(this.scene, this.camera); this.draw();
+    this.sizeLabels(); this.labels.render(this.scene, this.camera); this.draw();
   }
 }

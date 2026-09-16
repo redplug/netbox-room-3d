@@ -47,7 +47,7 @@ def response_data(request, location, room, racks):
     else:
         can_edit = request.user.has_perm('netbox_room_3d.add_roomlayout')
         complete = True
-        layout = {'name': location.name, 'width': 12000, 'depth': 8000, 'height': 3000, 'grid': 600,
+        layout = {'name': location.name, 'width': 12000, 'depth': 8000, 'height': 3000, 'grid': 600, 'grid_origin': 'top-left',
                   'revision': 0, 'include_descendants': False, 'placements': [], 'blocks': [], 'appearances': {}}
     return JsonResponse({'layout': layout, 'racks': list(racks.values()), 'can_edit': can_edit,
                          'warning': '' if complete else '일부 배치 대상이 이동·삭제되었거나 조회 권한이 없어 읽기 전용으로 표시합니다. 관리자에게 레이아웃 정리를 요청하세요.'})

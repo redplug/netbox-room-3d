@@ -21,7 +21,7 @@ export function demoData(id = 1) {
   }));
   return {
     can_edit: true, warning: '', racks,
-    layout: { name: id === 1 ? '서버실 A' : '네트워크실 B', width: 12000, depth: 8000, height: 3000, grid: 600,
+    layout: { name: id === 1 ? '서버실 A' : '네트워크실 B', width: 12000, depth: 8000, height: 3000, grid: 600, grid_origin: 'top-left',
       include_descendants: false, revision: 0, appearances: {},
       placements: racks.slice(0, id === 1 ? 4 : 2).map((r, i) => ({ rack_id: r.id, x: 2400 + i * 1200, z: 3000, rotation: 0, locked: false, dimensions: {} })),
       blocks: [{ id: 'pillar1', name: '기둥', x: 9000, z: 6000, width: 600, depth: 600, height: 3000 }],

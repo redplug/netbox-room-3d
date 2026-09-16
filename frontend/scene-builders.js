@@ -9,17 +9,23 @@ export function buildRack(placement, rack, layout, opts) {
   const root = new THREE.Group(); root.position.set(m(placement.x), 0, m(placement.z)); root.rotation.y = -placement.rotation * Math.PI / 180;
   const group = new THREE.Group(), top = new THREE.Group(); root.add(group); this.content.add(root);
   const meta = { rackId: rack.id };
+  const directionLabels = [];
   {
-    const points = new Float32Array([-.09, .015, rd / 2 + .07, .09, .015, rd / 2 + .07, 0, .015, rd / 2 + .25]);
+    const points = new Float32Array([-.09, rh + .015, rd / 2 - .15, .09, rh + .015, rd / 2 - .15, 0, rh + .015, rd / 2 + .05]);
     const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(points, 3));
     const arrow = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: '#089b88', side: THREE.DoubleSide, depthTest: false }));
     arrow.userData = { ...meta, frontMarker: true }; arrow.renderOrder = 10; top.add(arrow);
-    this.label('앞 · FRONT', 0, .03, rd / 2 + .38, top, 'rack-front');
-    this.label('뒤', 0, .03, -rd / 2 - .15, top, 'rack-rear');
+    directionLabels.push(this.label('앞 · FRONT', 0, rh + .03, rd / 2 + .2, top, 'rack-front'));
+    directionLabels.push(this.label('뒤', 0, rh + .03, -rd / 2 - .12, top, 'rack-rear'));
   }
   const usage = rackUsage(rack);
   const baseColor = '#273847';
-  this.cube(rw, .07, rd, 0, rh - .035, 0, baseColor, top).userData = meta;
+  this.cube(rw, .07, rd, 0, rh - .035, 0, baseColor, group).userData = meta;
+  const topOutline = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(rw, .072, rd)),
+    new THREE.LineBasicMaterial({ color: '#d9e6ec', transparent: true, opacity: .95, depthTest: false })
+  );
+  topOutline.position.y = rh - .035; topOutline.renderOrder = 9; topOutline.userData = meta; top.add(topOutline);
   this.cube(rw, .07, rd, 0, .035, 0, baseColor, group).userData = meta;
   this.cube(rw, .07, rd, 0, rh - .035, 0, baseColor, group, { transparent: !!opts.transparent, opacity: opts.transparent ? .18 : 1, depthWrite: !opts.transparent }).userData = meta;
   for (const x of [-rw / 2 + .025, rw / 2 - .025]) for (const z of [-rd / 2 + .025, rd / 2 - .025]) this.cube(.04, rh, .04, x, rh / 2, z, baseColor, group).userData = meta;
@@ -30,8 +36,6 @@ export function buildRack(placement, rack, layout, opts) {
     }
   }
   const railW = Math.min(m(rack.rail_width || 482.6), rw - .08), base = (rh - m(rack.u_height * U)) / 2;
-  if (opts.usage) this.label(`${usage.used}/${rack.u_height}U · 잔여 ${usage.free}U · ${usage.count}대 · ${usage.percent}%`, 0, rh + .35, 0, root, 'usage');
-  if (opts.usage) this.cube(rw, .025, rd, 0, rh + .02, 0, usageColor(usage.percent), group).userData = meta;
   if (opts.units) for (let i = 0; i < rack.u_height; i++) {
     const number = rack.starting_unit + (rack.desc_units ? rack.u_height - i - 1 : i);
     const y = base + m((i + .5) * U);
@@ -42,7 +46,16 @@ export function buildRack(placement, rack, layout, opts) {
     }
   }
   for (const x of [-railW / 2 - .012, railW / 2 + .012]) for (const z of [-rd / 2 + .065, rd / 2 - .065]) this.cube(.018, m(rack.u_height * U), .025, x, rh / 2, z, '#82929f', group).userData = meta;
-  const nameLabel = opts.labels ? this.label(`${rack.name}${placement.locked ? ' · 잠금' : ''}`, 0, rh + .18, 0, root) : null;
+  const nameLabel = opts.labels || opts.usage ? this.label('', 0, rh + .18, 0, root, 'rack-summary') : null;
+  if (nameLabel) {
+    const add = (text, className) => { const line = document.createElement('span'); line.className = className; line.textContent = text; nameLabel.element.append(line); };
+    if (opts.labels) add(`${rack.name}${placement.locked ? ' · 잠금' : ''}`, 'rack-name');
+    if (opts.usage) {
+      add(`${usage.used}/${rack.u_height}U · ${usage.percent}%`, 'rack-usage');
+      add(`잔여 ${usage.free}U · ${usage.count}대`, 'rack-usage-detail');
+      nameLabel.element.style.borderBottomColor = usageColor(usage.percent);
+    }
+  }
   this.textPanel('FRONT · 전면', rw * .85, .065, 0, rh - .035, rd / 2 + .002, group, false, meta);
   this.textPanel('REAR · 후면', rw * .85, .065, 0, rh - .035, -rd / 2 - .002, group, true, meta);
   for (const device of rack.devices) {
@@ -80,7 +93,7 @@ export function buildRack(placement, rack, layout, opts) {
     if (o.isMesh && o.userData.deviceInfo && Array.isArray(o.material)) devices.set(o.userData.deviceId, o);
   });
   root.remove(top);
-  return { group: root, details: group, top, devices, frameMeshes, nameLabel };
+  return { group: root, details: group, top, devices, frameMeshes, nameLabel, directionLabels, labelWidth: Math.min(rw, rd) };
 
 }
 
@@ -90,8 +103,10 @@ export function buildRoom(layout, opts) {
   this.cube(w, .08, d, w / 2, -.06, d / 2, '#fafcfd', group);
   if (opts.grid) {
     const points = [], step = Math.max(.1, m(layout.grid));
-    for (let x = 0; x <= w; x += step) points.push(new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, 0, d));
-    for (let z = 0; z <= d; z += step) points.push(new THREE.Vector3(0, 0, z), new THREE.Vector3(w, 0, z));
+    const origin = layout.grid_origin || 'top-left';
+    const startX = origin.endsWith('right') ? w % step : 0, startZ = origin.startsWith('bottom') ? d % step : 0;
+    for (let x = startX; x <= w; x += step) points.push(new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, 0, d));
+    for (let z = startZ; z <= d; z += step) points.push(new THREE.Vector3(0, 0, z), new THREE.Vector3(w, 0, z));
     const grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: '#8195a5', transparent: true, opacity: .85, depthWrite: false }));
     grid.position.y = .002; grid.userData.gridSize = layout.grid; group.add(grid);
   }

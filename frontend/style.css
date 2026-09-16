@@ -128,3 +128,8 @@
 #room3d .r3-label.rack-rear { color:#64748b; background:#f8fafccc; font-size:10px; padding:1px 4px; }
 #room3d #r3-room-summary { flex-shrink:0; }
 #room3d #r3-grid-size { width:72px; padding:3px 5px; min-height:24px; font-size:11px; }
+#room3d .r3-label.rack-summary { box-sizing:border-box; padding:3px 5px; text-align:center; border-bottom-width:3px; }
+#room3d .rack-summary span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:15px; }
+#room3d .rack-summary .rack-name { font-weight:700; font-size:9px; letter-spacing:0; }
+#room3d .rack-summary .rack-usage { font-size:10px; }
+#room3d .top-summary .rack-usage-detail { display:none; }

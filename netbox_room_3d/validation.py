@@ -44,6 +44,9 @@ def validate_scene(payload, racks, device_ids):
     for key in ('width', 'depth', 'height'):
         result[key] = integer(payload.get(key), key, 500, 100000)
     result['grid'] = integer(payload.get('grid'), '격자', 100, 5000)
+    grid_origin = payload.get('grid_origin', 'top-left')
+    if grid_origin not in ('top-left', 'bottom-left', 'top-right', 'bottom-right'):
+        raise SceneError('격자 시작 위치가 올바르지 않습니다.')
     include = payload.get('include_descendants', False)
     if not isinstance(include, bool):
         raise SceneError('하위 Location 포함 값은 true/false여야 합니다.')
@@ -133,6 +136,7 @@ def validate_scene(payload, racks, device_ids):
             entry['depth'] = number(appearance['depth'], '장비 깊이', 20, 3000)
         appearances[device_id] = entry
     result['scene'] = {
+        'grid_origin': grid_origin,
         'placements': [{k: v for k, v in p.items() if k not in ('width', 'depth', 'height', 'label')} for p in placements],
         'blocks': [{k: v for k, v in b.items() if k != 'label'} for b in blocks],
         'appearances': appearances,
