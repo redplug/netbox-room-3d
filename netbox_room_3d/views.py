@@ -10,6 +10,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
 from dcim.models import Location, Rack
 
+from . import Room3DConfig
 from .models import RoomLayout
 from .services import inventory, visible_scene
 from .validation import SceneError, integer, validate_scene
@@ -22,7 +23,10 @@ def viewer(request, pk=None):
     if pk:
         room = get_object_or_404(RoomLayout.objects.restrict(request.user, 'view'), pk=pk)
         initial = room.location_id
-    return render(request, 'netbox_room_3d/viewer.html', {'initial_location': initial})
+    return render(request, 'netbox_room_3d/viewer.html', {
+        'initial_location': initial,
+        'plugin_version': Room3DConfig.version,
+    })
 
 
 @login_required
