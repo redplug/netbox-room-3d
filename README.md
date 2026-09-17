@@ -92,11 +92,14 @@ sudo systemctl status netbox netbox-rq --no-pager
 ```
 
 NetBox 업그레이드 때 가상환경이 재생성되어도 플러그인이 설치되도록
-`/opt/netbox/local_requirements.txt`에 아래 한 줄을 추가합니다. wheel 파일은 이 경로에 계속 보관합니다.
+`/opt/netbox/local_requirements.txt`에 아래 두 줄을 추가합니다. 기존 Room 3D의 버전별 wheel 경로 항목은 이 설정으로 교체하고 다른 플러그인 항목은 유지합니다.
 
 ```text
-/opt/netbox/plugin-wheels/netbox_room_3d-0.1.7-py3-none-any.whl
+--find-links /opt/netbox/plugin-wheels
+netbox-room-3d
 ```
+
+이후 새 wheel은 `/opt/netbox/plugin-wheels/`에 보관하면 됩니다. `local_requirements.txt`는 버전마다 수정하지 않아도 됩니다. 가상환경 재생성 시 이 폴더와 설정된 패키지 인덱스에서 설치 가능한 최신 버전을 선택합니다. 기존 가상환경의 즉시 업데이트는 아래 업데이트 가이드의 설치 절차를 따르세요.
 
 ## 운영 배포 B: 기존 netbox-docker
 

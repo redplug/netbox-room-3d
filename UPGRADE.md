@@ -95,8 +95,15 @@ sudo systemctl status netbox netbox-rq --no-pager
 버전은 `0.1.7`, 마이그레이션은 `[X] 0001_initial`이어야 합니다.
 **이번 업데이트에는 새 마이그레이션이 없으므로 migrate 실행이 필요 없습니다.**
 미적용 마이그레이션이 보이면 기존 설치 상태를 먼저 조사하세요.
-`local_requirements.txt`의 기존 Room 3D wheel 경로를 0.1.7 경로로 **교체**합니다.
+`/opt/netbox/local_requirements.txt`의 기존 Room 3D wheel 경로를 다음 두 줄로 한 번만 교체합니다.
 다른 플러그인 항목은 유지하며, 같은 패키지의 구버전 항목을 중복으로 남기지 않습니다.
+
+```text
+--find-links /opt/netbox/plugin-wheels
+netbox-room-3d
+```
+
+이후에는 새 wheel을 이 폴더에 보관하면 되며 버전마다 requirements를 수정할 필요가 없습니다. 가상환경 재생성 시 이 폴더와 설정된 패키지 인덱스에서 설치 가능한 최신 버전을 선택합니다. 기존 가상환경은 위의 명시적인 wheel 설치 명령으로 업데이트합니다.
 
 ## 3B. 기존 netbox-docker 커스텀 이미지
 
@@ -138,7 +145,7 @@ docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage
 
 v0.1.7과 v0.1.6은 DB 구조가 같습니다. 기존 DB·미디어·설정을 유지하고 이전 패키지와 정적 파일을 복구합니다. v0.1.6에서 레이아웃을 다시 저장하면 `grid_origin` 설정은 제거될 수 있습니다.
 Linux는 서비스를 중지하고 보관한 0.1.6 wheel을 `pip install --no-deps /경로/netbox_room_3d-0.1.6-py3-none-any.whl`로 설치한 뒤
-`local_requirements.txt`도 이전 경로로 복원합니다. `collectstatic --no-input`, `check` 후 서비스를 시작합니다.
+롤백 버전을 유지하려면 `local_requirements.txt`의 `netbox-room-3d` 항목도 `netbox-room-3d==0.1.6`으로 임시 고정합니다. `--find-links` 설정과 이전 wheel은 유지합니다. `collectstatic --no-input`, `check` 후 서비스를 시작합니다.
 Docker는 관련 서비스의 `image:`를 보관한 이전 이미지로 복원하고 3B의 재생성·정적 파일 수집·검사를 반복합니다.
 동일한 DB·볼륨·설정을 연결하고 강력 새로고침한 뒤 데이터 비교를 다시 수행합니다.
 
