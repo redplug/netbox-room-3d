@@ -20,7 +20,7 @@ export function buildRack(placement, rack, layout, opts) {
   }
   const usage = rackUsage(rack);
   const baseColor = '#273847';
-  this.cube(rw, .07, rd, 0, rh - .035, 0, baseColor, group).userData = meta;
+  this.cube(rw, .07, rd, 0, rh - .035, 0, baseColor, top).userData = meta;
   const topOutline = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(rw, .072, rd)),
     new THREE.LineBasicMaterial({ color: '#d9e6ec', transparent: true, opacity: .95, depthTest: false })

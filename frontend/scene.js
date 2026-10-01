@@ -155,13 +155,17 @@ export class RoomScene {
     this.point(e);
     this.content.updateMatrixWorld(true);
     for (const hit of this.ray.intersectObjects(this.content.children, true)) {
-      if (!this.isVisible(hit.object)) continue;
+      if (!hit.object.isMesh || !this.isVisible(hit.object)) continue;
       if (hit.object.userData.rackId || hit.object.userData.blockId) return hit.object.userData;
     }
     return null;
   }
   down(e) {
     if (e.button !== 0) return;
+    if (e.shiftKey && this.mode === 'top') {
+      const hit = this.hit(e);
+      if (hit) { this.pointerStart = null; this.handlers.multiSelect?.(hit); e.stopImmediatePropagation(); return; }
+    }
     if (this.mode === 'walk') { this.renderer.domElement.focus(); this.walkPointer = { x: e.clientX, y: e.clientY }; this.renderer.domElement.setPointerCapture(e.pointerId); }
     const hit = this.hit(e); this.pointerStart = { x: e.clientX, y: e.clientY, hit };
     if (hit && this.mode === 'top' && this.editable) {
@@ -390,6 +394,21 @@ export class RoomScene {
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(device.geometry), new THREE.LineBasicMaterial({ color: '#fbbf24' }));
       device.parent.add(edges); this.selectionObjects.push(edges);
     }
+  }
+  markMany(keys) {
+    for (const marker of this.multiMarkers || []) this.disposeGroup(marker);
+    this.multiMarkers = [];
+    for (const key of keys) {
+      const [kind, id] = key.split(':');
+      const node = kind === 'rack' ? this.rackNodes?.get(Number(id)) : this.blockNodes?.get(id);
+      if (!node) continue;
+      const item = kind === 'rack' ? dimensions(this.racks.find(r => r.id === Number(id)), this.layout.placements.find(p => p.rack_id === Number(id))) : this.layout.blocks.find(b => b.id === id);
+      const shape = new THREE.BoxGeometry(m(item.width) + .03, .02, m(item.depth) + .03);
+      const edges = new THREE.EdgesGeometry(shape); shape.dispose();
+      const marker = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: '#e5a321', depthTest: false }));
+      marker.position.y = m(item.height) + .02; marker.renderOrder = 20; node.group.add(marker); this.multiMarkers.push(marker);
+    }
+    this.draw();
   }
   update(layout, racks, selected, opts = {}) {
     this.state(); this.clearFocus(); this.layout = layout; this.racks = racks; this.editable = opts.editable;

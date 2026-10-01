@@ -31,9 +31,16 @@ export class API {
       const current = await this.load(id);
       if (current.layout.revision !== layout.revision) throw new Error('다른 탭에서 먼저 저장했습니다. 다시 불러오세요.');
       const saved = structuredClone(layout); saved.revision++;
+      const historyKey = `room3d-history-${id}`, history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+      history.unshift({ saved_at: new Date().toISOString(), layout: current.layout });
+      localStorage.setItem(historyKey, JSON.stringify(history.slice(0, 20)));
       localStorage.setItem(`room3d-demo-v1-${id}`, JSON.stringify(saved));
       return { ...current, layout: saved };
     }
     return this.request(this.locations.find(l => l.id === id).url, { method: 'PUT', body: JSON.stringify(layout) });
+  }
+  async history(id) {
+    if (this.demo) return { history: JSON.parse(localStorage.getItem(`room3d-history-${id}`) || '[]') };
+    return this.request(`${this.locations.find(l => l.id === id).url}history/`);
   }
 }

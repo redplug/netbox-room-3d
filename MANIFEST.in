@@ -1,5 +1,6 @@
 include README.md UPGRADE.md RELEASE_NOTES.md VERIFICATION.md package.json package-lock.json vite.config.js playwright.config.js index.html compose.yaml
 include PERFORMANCE.md PERFORMANCE_PLAN.md
+include VERIFICATION-v0.1.9.md
 recursive-include scripts *.mjs
 recursive-include benchmarks *.json
 recursive-include frontend *.js *.css

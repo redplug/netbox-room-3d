@@ -43,6 +43,46 @@ class RoomAPITest(TestCase):
         self.client.force_login(self.admin)
         self.url = reverse('plugins:netbox_room_3d:location_scene', args=[self.location.pk])
 
+    def test_history_restore_revision_and_hidden_snapshots(self):
+        first = self.client.put(self.url, json.dumps(self.payload), content_type='application/json')
+        self.assertEqual(first.status_code, 200)
+        changed = first.json()['layout']; changed['name'] = 'Changed room'
+        second = self.client.put(self.url, json.dumps(changed), content_type='application/json')
+        self.assertEqual(second.status_code, 200)
+        self.assertNotIn('_history', second.json()['layout'])
+        from .api.serializers import RoomLayoutSerializer
+        self.assertNotIn('_history', RoomLayoutSerializer(RoomLayout.objects.get(location=self.location), context={'request': second.wsgi_request}).data['scene'])
+        url = reverse('plugins:netbox_room_3d:layout_history', args=[self.location.pk])
+        history = self.client.get(url).json()['history']
+        self.assertEqual(len(history), 1); self.assertEqual(history[0]['layout']['name'], 'Room')
+        restore = history[0]['layout']
+        self.assertEqual(self.client.put(self.url, json.dumps(restore), content_type='application/json').status_code, 409)
+        restore['revision'] = second.json()['layout']['revision']
+        restored = self.client.put(self.url, json.dumps(restore), content_type='application/json')
+        self.assertEqual(restored.status_code, 200); self.assertEqual(restored.json()['layout']['name'], 'Room')
+        self.assertEqual(restored.json()['layout']['revision'], 3)
+
+    def test_history_requires_current_permissions(self):
+        self.client.put(self.url, json.dumps(self.payload), content_type='application/json')
+        payload = copy.deepcopy(self.payload); payload['revision'] = 1
+        self.client.put(self.url, json.dumps(payload), content_type='application/json')
+        url = reverse('plugins:netbox_room_3d:layout_history', args=[self.location.pk])
+        self.client.force_login(self.reader)
+        self.assertIn(self.client.get(url).status_code, (403, 404))
+        self.grant(Location, ['view']); self.grant(RoomLayout, ['view'])
+        self.assertEqual(self.client.get(url).json()['history'], [])
+
+    def test_history_is_bounded_and_client_cannot_replace_it(self):
+        payload = copy.deepcopy(self.payload)
+        for revision in range(23):
+            payload['revision'] = revision; payload['_history'] = [{'fake': True}]
+            response = self.client.put(self.url, json.dumps(payload), content_type='application/json')
+            self.assertEqual(response.status_code, 200)
+        history = RoomLayout.objects.get(location=self.location).scene['_history']
+        self.assertEqual(len(history), 20)
+        self.assertEqual(history[0]['layout']['revision'], 22)
+        self.assertNotIn('_history', history[0]['layout'])
+
     def test_network_metadata_respects_object_permissions(self):
         port = Interface.objects.create(device=self.device, name='eth0', type='1000base-t')
         ip = IPAddress.objects.create(address='192.0.2.10/24')

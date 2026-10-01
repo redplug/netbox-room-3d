@@ -3,8 +3,7 @@
 {% block title %}Room 3D{% endblock %}
 {% block head %}<link rel="stylesheet" href="{% static 'netbox_room_3d/viewer.css' %}">{% endblock %}
 {% block content %}
-<div id="room3d" data-api="{% url 'plugins:netbox_room_3d:locations' %}" data-initial-location="{{ initial_location }}"></div>
-<div class="text-end text-muted small" style="position:fixed;right:16px;bottom:4px;z-index:10;padding:2px 8px;border-radius:4px;background:var(--bs-body-bg, #fff);pointer-events:none" aria-label="Room 3D plugin version">Room 3D v{{ plugin_version }}</div>
+<div id="room3d" data-version="{{ plugin_version }}" data-api="{% url 'plugins:netbox_room_3d:locations' %}" data-initial-location="{{ initial_location }}"></div>
 {% csrf_token %}
 {% endblock %}
 {% block javascript %}<script type="module" src="{% static 'netbox_room_3d/viewer.js' %}"></script>{% endblock %}

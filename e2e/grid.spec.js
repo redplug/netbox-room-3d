@@ -3,7 +3,7 @@ test('grid size applies, validates, undoes and persists without moving racks', a
   await page.goto('http://127.0.0.1:5173');
   const input = page.getByRole('spinbutton', { name: '격자 한 칸 (mm)', exact: true });
   await expect(input).toHaveValue('600');
-  const x = page.getByRole('spinbutton', { name: 'X (mm)', exact: true });
+  const x = page.getByRole('spinbutton', { name: '좌측 X (mm)', exact: true });
   const before = await x.inputValue();
   await input.fill('250'); await input.press('Tab');
   await expect(input).toHaveValue('250'); await expect(x).toHaveValue(before);

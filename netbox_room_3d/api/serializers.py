@@ -7,6 +7,10 @@ from netbox_room_3d.models import RoomLayout
 class RoomLayoutSerializer(NetBoxModelSerializer):
     """Required by NetBox change events; writes go through the validated scene endpoint."""
     url = serializers.SerializerMethodField()
+    scene = serializers.SerializerMethodField()
+
+    def get_scene(self, obj):
+        return {key: value for key, value in (obj.scene or {}).items() if key != '_history'}
 
     def get_url(self, obj):
         return obj.get_absolute_url()

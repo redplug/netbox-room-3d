@@ -6,12 +6,14 @@ from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
 from dcim.models import Location, Rack
 
 from . import Room3DConfig
 from .models import RoomLayout
+from .history import append_history
 from .services import inventory, visible_scene
 from .validation import SceneError, integer, validate_scene
 
@@ -45,6 +47,7 @@ def locations(request):
 def response_data(request, location, room, racks):
     if room:
         scene, complete = visible_scene(room, racks)
+        scene.pop('_history', None)
         can_edit = complete and RoomLayout.objects.restrict(request.user, 'change').filter(pk=room.pk).exists()
         layout = {k: getattr(room, k) for k in ('name', 'width', 'depth', 'height', 'grid', 'revision', 'include_descendants')}
         layout.update(scene)
@@ -96,6 +99,7 @@ def location_scene(request, pk):
                     raise PermissionDenied('조회할 수 없는 기존 배치가 포함되어 있습니다.')
             device_map = {d['id']: d for r in racks.values() for d in r['devices']}
             validated = validate_scene(payload, racks, set(device_map))
+            validated['scene']['_history'] = append_history(room, timezone.now().isoformat()) if room else []
             for device_id, appearance in validated['scene']['appearances'].items():
                 image_ids = {a['id'] for a in device_map[int(device_id)]['images']}
                 for face in ('front', 'rear'):
@@ -120,3 +124,32 @@ def location_scene(request, pk):
         return JsonResponse({'error': '; '.join(exc.messages)}, status=400)
     except IntegrityError:
         return JsonResponse({'error': '동시에 변경된 데이터가 있습니다. 다시 불러오세요.'}, status=409)
+
+
+@login_required
+@require_GET
+def layout_history(request, pk):
+    location = get_object_or_404(Location.objects.restrict(request.user, 'view'), pk=pk)
+    existing = RoomLayout.objects.filter(location=location).first()
+    if existing is None:
+        return JsonResponse({'history': []})
+    room = get_object_or_404(RoomLayout.objects.restrict(request.user, 'view'), pk=existing.pk)
+    result, inventories = [], {}
+    for entry in (room.scene or {}).get('_history', [])[:20]:
+        saved = entry['layout']
+        scope = saved.get('include_descendants', False)
+        if scope not in inventories:
+            inventories[scope] = inventory(request.user, location, scope)
+        racks = inventories[scope]
+        devices = {d['id']: d for r in racks.values() for d in r['devices']}
+        try:
+            valid = validate_scene(saved, racks, set(devices))
+            for device_id, appearance in valid['scene']['appearances'].items():
+                allowed = {image['id'] for image in devices[int(device_id)]['images']}
+                if any(appearance.get(f'{face}_image_id') is not None and appearance[f'{face}_image_id'] not in allowed for face in ('front', 'rear')):
+                    raise SceneError('이미지 조회 권한이 없습니다.')
+        except SceneError:
+            continue
+        scene = valid.pop('scene')
+        result.append({'saved_at': entry['saved_at'], 'layout': {**valid, **scene, 'revision': saved['revision']}})
+    return JsonResponse({'history': result})

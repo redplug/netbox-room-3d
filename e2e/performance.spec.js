@@ -43,7 +43,7 @@ test('cancelled rack drag restores coordinates; one completed drag produces one 
   await page.goto('http://127.0.0.1:5173');
   await page.getByRole('heading', { name: 'A-01', exact: true }).waitFor();
   await page.getByRole('button', { name: '평면 배치', exact: true }).click();
-  const x = page.getByRole('spinbutton', { name: 'X (mm)', exact: true });
+  const x = page.getByRole('spinbutton', { name: '좌측 X (mm)', exact: true });
   const start = await x.inputValue();
   const drag = async () => {
     const r = await page.locator('.r3-label.active').boundingBox();

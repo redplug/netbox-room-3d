@@ -2,6 +2,9 @@ import { rackUsage, deviceMatches, searchIPs } from './inventory.js';
 import './style.css';
 import { objectTypes } from './objects.js';
 import { API } from './api.js';
+import { createStudio } from './studio.js';
+import { editMany } from './layout-tools.js';
+import packageInfo from '../package.json';
 import { RoomScene } from './scene.js';
 import { dimensions, deviceBottom, errors, footprint, safeURL, snap } from './geometry.js';
 
@@ -10,7 +13,7 @@ const clone = value => structuredClone(value);
 const root = document.querySelector('#room3d');
 const api = new API(root);
 let data, layout, baseline, baselineRacks, locationId, locations = [], selected = null, scene, dirty = false, busy = false, undo = [], dragBefore;
-let onlyRackLocations = false;
+let onlyRackLocations = false, studio;
 let mode = '3d', filter = '', showPlaced = false, loadGeneration = 0;
 const opts = { units: true, usage: true, statuses: true, statusFilter: '', grid: true, walls: true, labels: true, transparent: true, sides: false, deviceColors: false, snap: true };
 
@@ -27,6 +30,11 @@ root.innerHTML = `
   </div>
   <dialog id="r3-room-dialog"><form id="r3-room-form"><div class="r3-dialog-title"><h2>서버실 기본 설정</h2><button type="button" class="r3-icon-button" data-action="close-room" aria-label="닫기">×</button></div><p>선택한 Location에 공간을 연결합니다. 모든 치수는 mm입니다.</p><label>서버실 이름<input name="name" required maxlength="100"></label><div class="r3-form-grid"><label>가로 (mm)<input type="number" name="width" min="500" max="100000" required></label><label>세로 (mm)<input type="number" name="depth" min="500" max="100000" required></label><label>높이 (mm)<input type="number" name="height" min="500" max="100000" required></label><label>격자 크기 (mm)<input type="number" name="grid" min="100" max="5000" required></label></div><label class="r3-check"><input name="include_descendants" type="checkbox"> 하위 Location의 랙 포함</label><p class="r3-help">공간을 줄이면 기존 배치가 경계를 벗어날 수 있습니다.</p><div class="r3-dialog-actions"><button type="button" data-action="close-room" class="r3-btn">닫기</button><button type="submit" class="r3-btn primary">설정 적용</button></div></form></dialog>`;
 const $ = selector => root.querySelector(selector);
+const versionLabel = document.createElement('span'); versionLabel.className = 'r3-version';
+versionLabel.textContent = `Room 3D v${root.dataset.version || packageInfo.version}`;
+versionLabel.setAttribute('aria-label', 'Room 3D plugin version');
+const statusBar = document.createElement('div'); statusBar.className = 'r3-statusbar';
+statusBar.append($('#r3-scene-stats'), versionLabel); $('.r3-app').append(statusBar);
 function fitViewport() {
   const top = Math.max(0, root.getBoundingClientRect().top);
   const height = Math.max(240, (window.visualViewport?.height || window.innerHeight) - top - 12);
@@ -130,6 +138,7 @@ function render(keepInspector = false, syncScene = true) {
   if (!keepInspector) inspector();
   root.querySelectorAll('select').forEach(el => el.classList.add('no-ts'));
   if (syncScene) scene?.update(layout, data.racks, selected, { ...opts, editable: canEdit() });
+  studio?.refresh();
 }
 function inspector() {
   const panel = $('#r3-inspector');
@@ -289,10 +298,12 @@ async function start() {
     scene = new RoomScene($('#r3-canvas'), {
       exitWalk: () => { mode = '3d'; scene.view(mode, selected); render(); },
       walkError: () => notice('걸어 다닐 빈 공간이 없습니다. 서버실 배치를 확인하세요.', true),
+      multiSelect: hit => studio?.toggle(hit),
       selectBlock: blockId => { selected = { blockId }; render(); },
       dragStart: hit => { selected = hit.blockId ? { blockId: hit.blockId } : { rackId: hit.rackId }; render(); $('[data-action=save]').disabled = true; },
       dragBlock: (id, x, z) => {
         if (!canEdit()) return;
+        if (moveGroup(`block:${id}`, x, z)) return;
         const b = layout.blocks.find(b => b.id === id); if (!b) return;
         dragBefore ||= { layout: clone(layout), racks: data.racks };
         ({ x: b.x, z: b.z } = snapItem(b, x, z)); selected = { blockId: id }; dirty = true; scene.movePlacement('block', id, b);
@@ -300,6 +311,7 @@ async function start() {
       select: (rackId, deviceId) => { selected = { rackId, deviceId }; render(); }, drop: place,
       drag: (id, x, z) => {
         if (!canEdit()) return;
+        if (moveGroup(`rack:${id}`, x, z)) return;
         const p = layout.placements.find(p => p.rack_id === id); if (p.locked) return;
         dragBefore ||= { layout: clone(layout), racks: data.racks }; ({ x: p.x, z: p.z } = snapItem({ ...p, ...dimensions(data.racks.find(r => r.id === id), p) }, x, z)); selected = { rackId: id }; dirty = true; scene.movePlacement('rack', id, p);
       },
@@ -307,10 +319,39 @@ async function start() {
       dragCancel: () => { if (dragBefore) { layout = dragBefore.layout; dragBefore = null; } changed(); },
       imageError: () => notice('일부 이미지를 불러오지 못해 해당 면을 장비 색상으로 표시합니다.', true),
     });
+    studio = createStudio(root, () => ({
+      layout, racks: data?.racks || [], locationId, editable: canEdit(),
+      mark: keys => scene.markMany(keys),
+      apply: next => { if (!canEdit()) throw new Error('읽기 전용입니다.'); remember(); layout = next; changed(); },
+      history: () => api.history(locationId),
+      restore: async saved => {
+        if (!canEdit()) throw new Error('읽기 전용입니다.');
+        const requested = locationId, revision = layout.revision, before = JSON.stringify(layout);
+        const current = await api.load(requested, saved.include_descendants);
+        if (requested !== locationId || before !== JSON.stringify(layout)) throw new Error('화면이 변경됐습니다. 이력을 다시 불러오세요.');
+        if (!current.can_edit) throw new Error('현재 배치를 편집할 권한이 없습니다.');
+        const next = { ...clone(saved), revision }, issues = errors(next, current.racks);
+        if (issues.length) throw new Error(issues.join(' / '));
+        remember(); layout = next; data.racks = current.racks; selected = null; changed(); scene.view(mode, selected); return true;
+      },
+    }));
     locations = await api.list(); renderLocations();
     if (!locations.length) { notice('조회할 수 있는 Location이 없습니다. NetBox의 Location과 권한을 확인하세요.', true); return; }
     const requested = Number(root.dataset.initialLocation || new URLSearchParams(window.location.search).get('location'));
     await load(locations.some(l => l.id === requested) ? requested : (locations.find(l => l.configured)?.id || locations[0].id));
   } catch (error) { notice(`뷰어를 시작할 수 없습니다: ${error.message}`, true); }
+}
+function moveGroup(key, x, z) {
+  if (!studio || studio.keys.size < 2 || !studio.keys.has(key)) return false;
+  const [kind, id] = key.split(':'), current = kind === 'rack' ? layout.placements.find(p => String(p.rack_id) === id) : layout.blocks.find(b => b.id === id);
+  const shape = kind === 'rack' ? { ...current, ...dimensions(data.racks.find(r => r.id === current.rack_id), current) } : current;
+  const target = snapItem(shape, x, z);
+  try {
+    const next = editMany(layout, data.racks, [...studio.keys], 'move', { x: target.x - current.x, z: target.z - current.z });
+    dragBefore ||= { layout: clone(layout), racks: data.racks }; layout = next; dirty = true;
+    for (const p of layout.placements) scene.movePlacement('rack', p.rack_id, p);
+    for (const b of layout.blocks) scene.movePlacement('block', b.id, b);
+  } catch (error) { notice(error.message, true); }
+  return true;
 }
 start();
