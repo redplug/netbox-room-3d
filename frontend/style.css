@@ -145,3 +145,4 @@
 @media (max-width:600px) { #room3d .r3-studio-grid { grid-template-columns:1fr; } #room3d #r3-pick-list { max-height:180px; } #room3d .r3-footer { max-height:24dvh; overflow:auto; } }
 
 #room3d #r3-tool-status:empty { display:none; }
+#room3d .r3-collision-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }

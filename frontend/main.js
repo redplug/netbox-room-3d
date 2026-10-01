@@ -4,6 +4,7 @@ import { objectTypes } from './objects.js';
 import { API } from './api.js';
 import { createStudio } from './studio.js';
 import { editMany } from './layout-tools.js';
+import { resolveMotion, repairOverlaps } from './collision.js';
 import packageInfo from '../package.json';
 import { RoomScene } from './scene.js';
 import { dimensions, deviceBottom, errors, footprint, safeURL, snap } from './geometry.js';
@@ -35,6 +36,10 @@ versionLabel.textContent = `Room 3D v${root.dataset.version || packageInfo.versi
 versionLabel.setAttribute('aria-label', 'Room 3D plugin version');
 const statusBar = document.createElement('div'); statusBar.className = 'r3-statusbar';
 statusBar.append($('#r3-scene-stats'), versionLabel); $('.r3-app').append(statusBar);
+const collisionControls = document.createElement('div'); collisionControls.className = 'r3-collision-controls';
+collisionControls.innerHTML = '<label class="r3-check"><input id="r3-repel" type="checkbox" checked> 겹침 자동 밀림</label><button class="r3-btn small" data-action="fix-overlap">겹침 자동 수정</button>';
+$('.r3-location-actions').prepend(collisionControls);
+const autoRepel = () => $('#r3-repel').checked;
 function fitViewport() {
   const top = Math.max(0, root.getBoundingClientRect().top);
   const height = Math.max(240, (window.visualViewport?.height || window.innerHeight) - top - 12);
@@ -115,6 +120,7 @@ function render(keepInspector = false, syncScene = true) {
   $('[data-action=cancel]').disabled = busy || !dirty;
   $('[data-action=undo]').disabled = !canEdit() || !undo.length;
   $('[data-action=add-block]').disabled = !canEdit();
+  $('[data-action=fix-overlap]').disabled = !canEdit(); $('#r3-repel').disabled = !canEdit();
   renderLocations();
   $('[data-action=room]').disabled = !canEdit();
   $('#r3-room-summary').textContent = `${layout.name} · ${layout.width / 1000} × ${layout.depth / 1000} m · ${layout.height / 1000} m 높이`;
@@ -182,7 +188,9 @@ async function load(id) {
 }
 function place(id, x = layout.width / 2, z = layout.depth / 2, renderAfter = true) {
   if (!canEdit() || !data.racks.some(r => r.id === id) || layout.placements.some(p => p.rack_id === id)) return;
-  remember(); layout.placements.push({ rack_id: id, x: snapCoordinate(x, 'x'), z: snapCoordinate(z, 'z'), rotation: 0, locked: false, dimensions: {} });
+  const next = clone(layout); next.placements.push({ rack_id: id, x: snapCoordinate(x, 'x'), z: snapCoordinate(z, 'z'), rotation: 0, locked: false, dimensions: {} });
+  try { const resolved = autoRepel() ? resolveMotion(layout, next, data.racks, [`rack:${id}`]) : next; remember(); layout = resolved; }
+  catch (error) { notice(error.message, true); return; }
   selected = { rackId: id }; if (renderAfter) changed(); notice('랙을 배치했습니다. 평면 모드에서 위치를 조정한 뒤 저장하세요.');
 }
 root.addEventListener('dragstart', e => { const card = e.target.closest('[data-rack]'); if (card) { e.dataTransfer.setData('text/plain', card.dataset.rack); e.dataTransfer.effectAllowed = 'copy'; } });
@@ -191,7 +199,12 @@ root.addEventListener('click', async e => {
   const action = button.dataset.action, id = Number(button.dataset.id);
   if (action === 'find-device' || scene.drag) return;
   try {
-    if (action === 'select') { selected = { rackId: id }; }
+    if (action === 'fix-overlap' && canEdit()) {
+      const next = repairOverlaps(layout, data.racks);
+      if (JSON.stringify(next) === JSON.stringify(layout)) notice('수정할 겹침이 없습니다.');
+      else { remember(); layout = next; notice('겹침을 자동 수정했습니다. 확인 후 배치 저장을 누르세요.'); }
+    }
+    else if (action === 'select') { selected = { rackId: id }; }
     else if (action === 'select-block') { selected = { blockId: button.dataset.id }; }
     else if (action === 'device') { selected.deviceId = id; }
     else if (action === 'place') place(id, undefined, undefined, false);
@@ -210,12 +223,14 @@ root.addEventListener('click', async e => {
       if (!preset) return;
       const id = crypto.randomUUID(), block = { id, type, name: preset.name, rotation: 0, width: Math.min(preset.width, layout.width), depth: Math.min(preset.depth, layout.depth), height: Math.min(preset.height, layout.height), x: layout.width / 2, z: layout.depth / 2 };
       const found = findBlockSpace(block);
+      if (!found && autoRepel()) { notice('빈 공간이 부족하여 오브젝트를 추가하지 않았습니다.', true); return; }
       if (!found) { block.x = layout.width / 2; block.z = layout.depth / 2; notice('빈 공간이 부족합니다. 좌표와 크기를 조정한 뒤 저장하세요.', true); }
       remember(); layout.blocks.push(block); selected = { blockId: id }; }
     else if (action === 'duplicate-block' && canEdit()) {
       const source = layout.blocks.find(b => b.id === selected.blockId); if (!source) return;
       const copy = { ...clone(source), id: crypto.randomUUID(), name: uniqueBlockName(source.name) };
       const found = findBlockSpace(copy, source);
+      if (!found && autoRepel()) { notice('복사할 빈 공간이 부족하여 배치를 유지했습니다.', true); return; }
       if (!found) { copy.x = source.x; copy.z = source.z; notice('복사할 빈 공간이 부족합니다. 복사본의 좌표를 조정한 뒤 저장하세요.', true); }
       remember(); layout.blocks.push(copy); selected = { blockId: copy.id };
     }
@@ -269,9 +284,18 @@ root.addEventListener('change', async e => {
     else p[key] = value;
     if (kind === 'dimensions' && ['width', 'depth'].includes(key) || kind === 'placement' && key === 'rotation') { const after = topLeft({ ...p, ...dimensions(rack, p) }); p.x += before.x - after.x; p.z += before.z - after.z; }
   }
+  let corrected = false;
+  if (autoRepel() && kind !== 'appearance' && ['x', 'z', 'width', 'depth', 'rotation'].includes(key)) {
+    const previous = undo.at(-1).layout;
+    try {
+      const next = resolveMotion(previous, layout, data.racks, [kind === 'block' ? `block:${selected.blockId}` : `rack:${selected.rackId}`]);
+      corrected = JSON.stringify(next) !== JSON.stringify(layout); layout = next;
+      if (corrected) notice('겹침을 피하도록 반대쪽 빈 공간으로 밀었습니다.');
+    } catch (error) { layout = previous; undo.pop(); notice(error.message, true); corrected = true; }
+  }
   if (kind === 'appearance' && key === 'color') root.querySelectorAll('.r3-face-preview > div').forEach(preview => { preview.style.background = value; });
   // Keep the focused form nodes alive while a blur/change moves into the next field.
-  changed(el.type === 'number' || el.type === 'color' || kind === 'block' && key === 'name');
+  changed(!corrected && (el.type === 'number' || el.type === 'color' || kind === 'block' && key === 'name'));
 });
 $('#r3-room-form').addEventListener('submit', async e => {
   e.preventDefault(); if (!canEdit()) return;
@@ -303,6 +327,7 @@ async function start() {
       dragStart: hit => { selected = hit.blockId ? { blockId: hit.blockId } : { rackId: hit.rackId }; render(); $('[data-action=save]').disabled = true; },
       dragBlock: (id, x, z) => {
         if (!canEdit()) return;
+        if (autoRepel()) { moveRepelled(`block:${id}`, x, z); return; }
         if (moveGroup(`block:${id}`, x, z)) return;
         const b = layout.blocks.find(b => b.id === id); if (!b) return;
         dragBefore ||= { layout: clone(layout), racks: data.racks };
@@ -311,6 +336,7 @@ async function start() {
       select: (rackId, deviceId) => { selected = { rackId, deviceId }; render(); }, drop: place,
       drag: (id, x, z) => {
         if (!canEdit()) return;
+        if (autoRepel()) { moveRepelled(`rack:${id}`, x, z); return; }
         if (moveGroup(`rack:${id}`, x, z)) return;
         const p = layout.placements.find(p => p.rack_id === id); if (p.locked) return;
         dragBefore ||= { layout: clone(layout), racks: data.racks }; ({ x: p.x, z: p.z } = snapItem({ ...p, ...dimensions(data.racks.find(r => r.id === id), p) }, x, z)); selected = { rackId: id }; dirty = true; scene.movePlacement('rack', id, p);
@@ -322,7 +348,8 @@ async function start() {
     studio = createStudio(root, () => ({
       layout, racks: data?.racks || [], locationId, editable: canEdit(),
       mark: keys => scene.markMany(keys),
-      apply: next => { if (!canEdit()) throw new Error('읽기 전용입니다.'); remember(); layout = next; changed(); },
+      apply: next => { if (!canEdit()) throw new Error('읽기 전용입니다.'); if (JSON.stringify(next) !== JSON.stringify(layout)) { remember(); layout = next; changed(); } },
+      move: (keys, x, z) => autoRepel() ? repelOffsets(keys, x, z) : editMany(layout, data.racks, keys, 'move', { x, z }),
       history: () => api.history(locationId),
       restore: async saved => {
         if (!canEdit()) throw new Error('읽기 전용입니다.');
@@ -340,6 +367,27 @@ async function start() {
     const requested = Number(root.dataset.initialLocation || new URLSearchParams(window.location.search).get('location'));
     await load(locations.some(l => l.id === requested) ? requested : (locations.find(l => l.configured)?.id || locations[0].id));
   } catch (error) { notice(`뷰어를 시작할 수 없습니다: ${error.message}`, true); }
+}
+function repelOffsets(keys, x, z) {
+  if (![x, z].every(Number.isFinite)) throw new Error('이동 거리를 숫자로 입력하세요.');
+  const proposed = clone(layout);
+  for (const p of proposed.placements) if (keys.includes(`rack:${p.rack_id}`)) { p.x += x; p.z += z; }
+  for (const b of proposed.blocks) if (keys.includes(`block:${b.id}`)) { b.x += x; b.z += z; }
+  return resolveMotion(layout, proposed, data.racks, keys);
+}
+function moveRepelled(key, x, z) {
+  const keys = studio?.keys.has(key) ? [...studio.keys] : [key];
+  const [kind, id] = key.split(':'), current = kind === 'rack' ? layout.placements.find(p => String(p.rack_id) === id) : layout.blocks.find(b => b.id === id);
+  if (!current) return;
+  const shape = kind === 'rack' ? { ...current, ...dimensions(data.racks.find(r => r.id === current.rack_id), current) } : current;
+  const target = snapItem(shape, x, z);
+  try {
+    const next = repelOffsets(keys, target.x - current.x, target.z - current.z);
+    if (JSON.stringify(next) === JSON.stringify(layout)) return;
+    dragBefore ||= { layout: clone(layout), racks: data.racks }; layout = next; dirty = true;
+    for (const p of layout.placements) scene.movePlacement('rack', p.rack_id, p);
+    for (const b of layout.blocks) scene.movePlacement('block', b.id, b);
+  } catch (error) { notice(error.message, true); }
 }
 function moveGroup(key, x, z) {
   if (!studio || studio.keys.size < 2 || !studio.keys.has(key)) return false;

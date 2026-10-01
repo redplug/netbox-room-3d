@@ -8,3 +8,5 @@ recursive-include e2e *.js
 recursive-include dev *.py Dockerfile
 recursive-include netbox_room_3d/templates *.html
 recursive-include netbox_room_3d/static *.js *.css
+
+include VERIFICATION-v0.1.10.md

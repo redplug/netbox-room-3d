@@ -108,6 +108,7 @@ test('sample: room setup, manual placement, collision, lock, undo, save and rest
   await page.getByRole('spinbutton', { name: '가로 (mm)', exact: true }).fill('13200');
   await page.getByRole('button', { name: '설정 적용' }).click();
   await expect(page.locator('#r3-room-summary')).toContainText('13.2');
+  await page.locator('#r3-repel').uncheck();
   await page.locator('[data-action=place]').first().click();
   await expect(page.getByRole('heading', { name: 'A-05', exact: true })).toBeVisible();
   await page.getByRole('spinbutton', { name: '좌측 X (mm)', exact: true }).fill('2400');

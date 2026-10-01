@@ -10,7 +10,7 @@ export function createStudio(root, context) {
     <div class="r3-studio-grid"><section><h3>다중 선택 <span id="r3-picked-count"></span></h3><button class="r3-btn small" data-tool="all">전체 선택</button> <button class="r3-btn small" data-tool="none">선택 해제</button><div id="r3-pick-list"></div></section>
     <section><h3>일괄 이동</h3><div class="r3-form-grid"><label>X 이동 (mm)<input id="r3-dx" type="number" value="0"></label><label>Z 이동 (mm)<input id="r3-dz" type="number" value="0"></label></div><button class="r3-btn" data-tool="move" data-write>이동 적용</button>
     <h3>정렬 / 간격</h3><label>정렬 기준<select id="r3-align"><option value="left">좌측</option><option value="right">우측</option><option value="top">상단</option><option value="bottom">하단</option></select></label><button class="r3-btn" data-tool="align" data-write>정렬 적용</button>
-    <div class="r3-form-grid"><label>배치 축<select id="r3-axis"><option value="x">가로 X</option><option value="z">세로 Z</option></select></label><label>가장자리 간격 (mm)<input id="r3-gap" type="number" min="0" value="600"></label></div><button class="r3-btn" data-tool="space" data-write>간격 적용</button><p>간격 0은 붙여 배치입니다. 정렬·이동이 충돌하면 적용하지 않습니다.</p>
+    <div class="r3-form-grid"><label>배치 축<select id="r3-axis"><option value="x">가로 X</option><option value="z">세로 Z</option></select></label><label>가장자리 간격 (mm)<input id="r3-gap" type="number" min="0" value="600"></label></div><button class="r3-btn" data-tool="space" data-write>간격 적용</button><p>간격 0은 붙여 배치입니다. 정렬·간격은 충돌 시 거부하며, 이동은 상단 자동 밀림 설정을 따릅니다.</p>
     <h3>룸 오브젝트 반복 복사</h3><div class="r3-form-grid"><label>추가 개수<input id="r3-repeat-count" type="number" min="1" max="199" value="2"></label><label>복사 방향<select id="r3-repeat-direction"><option value="right">오른쪽</option><option value="left">왼쪽</option><option value="down">아래</option><option value="up">위</option></select></label></div><p>위의 가장자리 간격을 사용합니다. 룸 오브젝트 하나를 선택하세요.</p><button class="r3-btn" data-tool="repeat" data-write>반복 복사</button>
     <h3>거리 측정</h3><p id="r3-measure"></p>
     <h3>평면도 내보내기</h3><button class="r3-btn" data-tool="png">PNG 다운로드</button> <button class="r3-btn" data-tool="pdf">PDF 다운로드</button><p>이름·치수·전면 방향을 포함한 전체 평면도입니다.</p>
@@ -41,7 +41,8 @@ export function createStudio(root, context) {
       if (action === 'close') { panel.close(); return; }
       if (action === 'all') entries(c.layout, c.racks).forEach(e => keys.add(e.key));
       else if (action === 'none') keys.clear();
-      else if (['move', 'align', 'space'].includes(action)) c.apply(editMany(c.layout, c.racks, chosen, action, { x: number('dx'), z: number('dz'), edge: value('align'), axis: value('axis'), gap: number('gap') }));
+      else if (action === 'move') c.apply(c.move(chosen, number('dx'), number('dz')));
+      else if (['align', 'space'].includes(action)) c.apply(editMany(c.layout, c.racks, chosen, action, { edge: value('align'), axis: value('axis'), gap: number('gap') }));
       else if (action === 'repeat') { if (keys.size !== 1) throw new Error('룸 오브젝트 하나만 선택하세요.'); c.apply(repeatBlock(c.layout, c.racks, chosen[0], number('repeat-count'), value('repeat-direction'), number('gap'))); }
       else if (action === 'png' || action === 'pdf') await exportPlan(c.layout, c.racks, action);
       else if (action === 'history') {
