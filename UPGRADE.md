@@ -13,6 +13,25 @@ v0.1.10의 앱 하단 상태바에 Room 3D v0.1.10가 표시되는지 확인하�
 
 ## 1. 업데이트 전 준비
 
+Linux/systemd 서버는 아래의 수동 다운로드·설치 명령 대신 저장소 루트의 `deploy.sh`로 일괄 실행할 수 있습니다. 백업은 기존 운영 절차로 먼저 완료하세요.
+
+```sh
+git pull --ff-only
+sh deploy.sh
+# 특정 버전 지정
+sh deploy.sh 0.1.10
+```
+
+기본 버전은 Git 폴더의 `pyproject.toml`에서 읽으므로 다음 버전으로 갱신해도 스크립트를 수정할 필요가 없습니다. 다운로드, wheel 체크섬 검증, 패키지 보관, 서비스 중지, 설치, migrate, collectstatic, check, 서비스 재시작과 상태 확인을 순서대로 실행합니다. 같은 버전 재실행도 지원합니다. 설치 이후 오류가 발생하면 서비스는 중지 상태를 유지하며, 오류를 해결하고 같은 명령을 다시 실행하세요.
+
+기본 경로는 `/opt/netbox`, 서비스는 `netbox netbox-rq`입니다. 환경이 다르면 다음처럼 지정합니다.
+
+```sh
+NETBOX_ROOT=/srv/netbox NETBOX_SERVICES="netbox netbox-worker" sh deploy.sh
+```
+
+`gh` 로그인과 sudo 권한이 필요합니다. 기존 `PLUGINS` 및 `local_requirements.txt` 설정은 아래 안내대로 유지하며, 스크립트는 해당 설정을 자동으로 바꾸지 않습니다. Docker 설치는 아래 3B 절차를 사용하세요.
+
 1. 유지보수 시간 동안 사용자 저장과 자동화 쓰기를 중지합니다.
 2. 기존 운영 절차로 **전체 PostgreSQL DB, NetBox 설정, 미디어**를 백업하고 복구 가능한지 확인합니다.
    로컬 PostgreSQL의 DB 이름이 netbox인 예: `sudo -u postgres pg_dump -Fc netbox > netbox-before-room3d-0.1.10.dump`.

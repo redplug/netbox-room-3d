@@ -10,3 +10,4 @@ playwright-report/
 artifacts/
 *.egg-info/
 .pytest_cache/
+room3d-downloads/
