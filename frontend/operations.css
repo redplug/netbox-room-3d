@@ -14,4 +14,5 @@
 #room3d .r3-operation-status { min-height: 1.5em; margin-top: 14px; overflow-wrap: anywhere; }
 #room3d .r3-operation-status.error { color: #b33932; }
 #room3d .r3-zone-legend { color: #35606c; font-size: 12px; }
+#room3d .planned-device { color: #006b91; border: 1px dashed #008fcb; background: #e6f7ff; padding: 3px 5px; font-size: 11px; }
 @media(max-width:540px) { #room3d .r3-operations { padding: 14px; } #room3d .r3-operation-grid { grid-template-columns: 1fr; } }

@@ -11,4 +11,7 @@ urlpatterns = [
     path('data/locations/<int:pk>/plans/', operations.plans, name='plans'),
     path('data/locations/<int:pk>/cleanup/', operations.cleanup, name='cleanup'),
     path('data/locations/<int:pk>/cables/', operations.cables, name='cables'),
+    path('data/locations/<int:pk>/capacity/', operations.capacity, name='capacity'),
+    path('data/locations/<int:pk>/recommendations/', operations.recommendations, name='recommendations'),
+    path('data/locations/<int:pk>/device-types/', operations.device_types, name='device_types'),
 ]

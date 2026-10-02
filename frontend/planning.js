@@ -18,7 +18,7 @@ export function placeRows(layout, racks, ids, options) {
   return next;
 }
 export function layoutDiff(before, after, racks) {
-  const items = l => [...entries(l,racks), ...(l.zones || []).map(z => ({...z,key:`zone:${z.id}`,kind:'zone',height:10}))];
+  const items = l => [...entries(l,racks), ...(l.zones || []).map(z => ({...z,key:`zone:${z.id}`,kind:'zone',height:10})), ...(l.planned_devices || []).map(p => ({...p,key:`planned:${p.id}`,kind:'planned'}))];
   const a = new Map(items(before).map(e => [e.key,e])), b = new Map(items(after).map(e => [e.key,e]));
   const result = [];
   for (const key of new Set([...a.keys(),...b.keys()])) {
@@ -26,7 +26,7 @@ export function layoutDiff(before, after, racks) {
     if (!old) result.push({key,name:current.name,type:'added',current});
     else if (!current) result.push({key,name:old.name,type:'removed',old});
     else {
-      const fields = ['x','z','rotation','width','depth','height','locked','name','color'].filter(k => JSON.stringify(old[k]) !== JSON.stringify(current[k]));
+      const fields = ['x','z','rotation','width','depth','height','locked','name','color','rack_id','position','face','device_type_id'].filter(k => JSON.stringify(old[k]) !== JSON.stringify(current[k]));
       if (fields.length) result.push({key,name:current.name,type:'changed',old,current,fields});
     }
   }

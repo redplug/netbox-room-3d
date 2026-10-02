@@ -3,9 +3,10 @@ import { errors, safeURL } from './geometry.js';
 import { layoutDiff, placeRows, validCamera } from './planning.js';
 import { operation } from './operations-api.js';
 import { createOverlays } from './scene-overlays.js';
+import { createCapacityTools } from './capacity-ui.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-const tabs = ['통로', '구역', '변경 비교', '열 배치', '참조 정리', '시점', '배치안', '케이블'];
+const tabs = ['통로', '구역', '변경 비교', '열 배치', '참조 정리', '시점', '배치안', '케이블', '예약·용량', '설치 후보', '가상 증설'];
 const button = (action, label, disabled = false, id = '') => `<button type="button" class="r3-btn small" data-op="${action}" data-id="${esc(id)}" ${disabled ? 'disabled' : ''}>${label}</button>`;
 const field = (name, label, value, min = 0, max = 100000) => `<label>${label}<input name="${name}" type="number" value="${esc(value)}" min="${min}" max="${max}" step="any" required></label>`;
 
@@ -21,6 +22,7 @@ export function createOperations(root, get) {
   const message = (text = '', error = false) => { status.textContent = text; status.classList.toggle('error', error); };
   const value = name => body.elements.namedItem(name)?.value;
   const num = name => Number(value(name));
+  const capacityTools = createCapacityTools({body,get,request,apply,message,render,redraw:refresh});
   const favoritesKey = () => `room3d-camera-v1-${get().locationId}`;
   function favorites() { try { const rows = JSON.parse(localStorage.getItem(favoritesKey()) || '[]'); return Array.isArray(rows) ? rows.filter(p => validCamera(p.camera)).slice(0,20) : []; } catch { return []; } }
   function capture() {
@@ -60,9 +62,11 @@ export function createOperations(root, get) {
       body.innerHTML = `<p>즐겨찾기는 현재 브라우저·Location별로 저장됩니다. 공유 링크는 시점만 포함하며 NetBox 조회 권한을 우회하지 않습니다.</p><label>시점 이름<input name="name" maxlength="100" value="기본 시점"></label><div>${button('camera-save','현재 시점 저장')}${button('camera-share','공유 링크 만들기')}</div><label>공유 링크<input name="share" readonly aria-label="시점 공유 링크"></label><div class="r3-operation-list">${favorites().map(p => `<div class="r3-operation-row">${esc(p.name)} ${button('camera-load','이동',false,p.id)}${button('camera-delete','삭제',false,p.id)}</div>`).join('')}</div>`;
     } else if (tab === 6) {
       body.innerHTML = `<p>Location마다 최대 10개의 배치안을 저장합니다. 불러온 안은 편집본이며 배치 저장을 눌러야 현재 배치가 바뀝니다.</p><label>새 배치안 이름<input name="name" maxlength="100" placeholder="예: 증설 검토안"></label><div>${button('plan-create','현재 편집본을 배치안으로 저장',disabled)}${button('plans','목록 새로고침',pending)}</div><div class="r3-operation-list">${plans.map(p => `<div class="r3-operation-row"><strong>${esc(p.name)}</strong><br>${esc(p.saved_at)}${!p.valid ? '<p>참조가 유효하지 않은 배치안입니다.</p>' : ''}<div>${button('plan-load','불러오기',disabled || !p.valid,p.id)}${button('plan-compare','현재 편집본과 비교',!p.valid,p.id)}${button('plan-rename','이름 변경',disabled,p.id)}${button('plan-delete','삭제',disabled,p.id)}</div></div>`).join('') || '목록 새로고침으로 저장된 배치안을 조회하세요.'}</div>`;
-    } else {
+    } else if (tab === 7) {
       const device = c.racks.flatMap(r => r.devices).find(d => d.id === c.selected?.deviceId);
       body.innerHTML = `<p>선택 장비: <strong>${esc(device?.name || '3D 화면에서 장비를 먼저 선택하세요')}</strong></p><p>직접 연결된 케이블만 조회합니다. 패치 패널을 통과한 전체 경로 추적은 포함하지 않습니다. 선은 랙 간 연결 개요이며 실제 케이블 경로·길이가 아닙니다.</p><div>${button('cables','선택 장비 케이블 조회',pending || !device)}${button('cables-clear','연결선 숨기기')}</div><div class="r3-operation-list">${cables.map(cable => { const url = safeURL(cable.url); return `<div class="r3-operation-row"><strong>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(cable.label)}</a>` : esc(cable.label)}</strong> · ${esc(cable.status)}<br>${cable.ends.map(e => `${esc(e.side)}: ${esc(e.device)} / ${esc(e.port)}${l.placements.some(p => p.rack_id === e.rack_id) ? '' : ' (방 밖 또는 미배치)'}`).join('<br>')}</div>`; }).join('') || '조회 결과가 없습니다.'}</div>`;
+    } else {
+      capacityTools.render(tab - 8);
     }
   }
   let showDiff = false;
@@ -72,6 +76,7 @@ export function createOperations(root, get) {
     if (location !== c.locationId) { location = c.locationId; plans = []; preview = null; compare = null; cables = []; showDiff = false; zoneId = null; if (dialog.open) { render(); message(); } }
     if (selectedDevice !== c.selected?.deviceId) { selectedDevice = c.selected?.deviceId; cables = []; if (dialog.open && tab === 7) render(); }
     overlays.update(c.layout,c.racks,showDiff ? layoutDiff(compare || c.baseline,c.layout,c.racks) : [],cables);
+    capacityTools.sync();
     if (!shareApplied) {
       shareApplied = true;
       try { const encoded = new URLSearchParams(window.location.hash.slice(1)).get('view'); if (encoded && encoded.length < 2000) { const camera = JSON.parse(encoded); if (validCamera(camera)) requestAnimationFrame(() => { if (location === c.locationId) restoreCamera(camera); }); } } catch { /* Invalid shared views never prevent loading the room. */ }
@@ -90,6 +95,7 @@ export function createOperations(root, get) {
     const c = get(), next = structuredClone(c.layout);
     if (name === 'close') { dialog.close(); return; }
     if (pending) return;
+    if (await capacityTools.action(name,id)) return;
     if (name === 'clearance') { if (!body.reportValidity()) return; next.clearance = { enabled:body.elements.enabled.checked, front:num('front'), rear:num('rear') }; apply(next,false); }
     if (name === 'zone-edit') { zoneId = id; render(); }
     if (name === 'zone-new') { zoneId = null; render(); }
@@ -103,7 +109,7 @@ export function createOperations(root, get) {
     if (name === 'diff-clear') { showDiff = false; refresh(); }
     if (name === 'diff-baseline') { compare = null; render(); refresh(); }
     if (name === 'rows') { if (!body.reportValidity()) return; apply(placeRows(next,c.racks,[...body.querySelectorAll('input[name=racks]:checked')].map(el => Number(el.value)), { x:num('x'),z:num('z'),columns:num('columns'),gapX:num('gapX'),gapZ:num('gapZ'),rotation:num('rotation') })); render(); }
-    if (name === 'cleanup-preview') { preview = await request('cleanup'); render(); message('대상을 확인하세요. 저장하지 않은 변경은 실행 시 폐기됩니다.'); }
+    if (name === 'cleanup-preview') { preview = await request('cleanup'); render(); message(`대상을 확인하세요. 저장하지 않은 변경은 실행 시 폐기됩니다.${preview.changes.planned_ids?.length ? ` 가상 장비 참조: ${preview.changes.planned_ids.join(', ')}` : ''}`); }
     if (name === 'cleanup-apply') {
       if (!preview || !confirm('표시한 참조를 정리하고 저장하지 않은 편집을 버릴까요? NetBox 랙이나 장비 자체는 삭제하지 않습니다.')) return;
       const result = await request('cleanup',{ revision:preview.revision,token:preview.token,confirm:true }); get().replace(result); preview = null; render(); message('참조를 정리하고 저장했습니다.');
@@ -134,5 +140,5 @@ export function createOperations(root, get) {
   });
   body.addEventListener('submit',event => event.preventDefault());
   dialog.addEventListener('cancel',event => { if (pending) event.preventDefault(); });
-  return { refresh, dispose:() => { overlays.dispose(); dialog.remove(); launcher.remove(); } };
+  return { refresh, dispose:() => { overlays.dispose(); capacityTools.dispose(); dialog.remove(); launcher.remove(); } };
 }

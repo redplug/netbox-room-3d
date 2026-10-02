@@ -1,6 +1,10 @@
+import { capacityPreview, candidateRacks, demoTypes, demoRacks } from './capacity.js';
 // These endpoints share NetBox session authentication and CSRF protection.
 export async function operation(context, resource, payload, query = '') {
   if (context.demo) {
+    if (resource === 'device-types') return {device_types:demoTypes.filter(t=>t.model.includes(new URLSearchParams(query.replace(/^\?/, '')).get('q')||'')),truncated:false};
+    if (resource === 'capacity') return capacityPreview(demoRacks(context.racks),demoTypes,payload?.planned_devices??context.layout.planned_devices??[]);
+    if (resource === 'recommendations') return candidateRacks(demoRacks(context.racks),demoTypes,payload.planned_devices||[],payload.device_type_id,payload.face);
     if (resource === 'cables') return { cables: [], demo: true };
     if (resource === 'cleanup') throw new Error('참조 정리는 NetBox 관리자 화면에서만 사용할 수 있습니다.');
     const key = `room3d-plans-v1-${context.locationId}`;

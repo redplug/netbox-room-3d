@@ -20,6 +20,7 @@ from .models import RoomLayout
 from .services import inventory, visible_scene
 from .validation import SceneError, integer, validate_scene
 from .views import response_data
+from .capacity import analyze, capacity_inventory, planned_types, recommend, type_row, validate_planned
 
 
 class Conflict(SceneError):
@@ -68,10 +69,11 @@ def revision(room, payload):
         raise Conflict('다른 사용자가 변경했습니다. 다시 불러오세요.')
 
 
-def normalized(payload, user, location):
+def normalized(payload, user, location, strict_planned=True):
     racks = inventory(user, location, payload.get('include_descendants') is True)
     devices = {d['id']: d for rack in racks.values() for d in rack['devices']}
     valid = validate_scene(payload, racks, set(devices))
+    validate_planned(user, location, valid['include_descendants'], valid['scene'].get('planned_devices', []), strict=strict_planned)
     for device_id, appearance in valid['scene']['appearances'].items():
         allowed = {image['id'] for image in devices[int(device_id)]['images']}
         if any(appearance.get(f'{face}_image_id') is not None and appearance[f'{face}_image_id'] not in allowed for face in ('front','rear')):
@@ -83,7 +85,7 @@ def plan_rows(room, user, location):
     result = []
     for item in (room.scene or {}).get('_plans', []):
         try:
-            valid, _ = normalized(item['layout'], user, location)
+            valid, _ = normalized(item['layout'], user, location, strict_planned=False)
         except SceneError:
             if user.is_superuser:
                 result.append({**{k:item[k] for k in ('id','name','saved_at')}, 'valid':False})
@@ -104,7 +106,7 @@ def plans(request, pk):
     with transaction.atomic():
         location, room = room_for(request, pk, True)
         revision(room, payload)
-        if not visible_scene(room, inventory(request.user, location, room.include_descendants))[1]:
+        if not visible_scene(room, inventory(request.user, location, room.include_descendants), request.user)[1]:
             raise PermissionDenied
         stored = deepcopy((room.scene or {}).get('_plans', []))
         action = payload.get('action')
@@ -160,7 +162,11 @@ def cleanup_preview(room, user, location):
             field = f'{face}_image_id'
             if field in current['appearances'][key] and current['appearances'][key][field] not in allowed:
                 removed_images.append(f'{key}:{face}'); del current['appearances'][key][field]
-    changes = {'rack_ids':removed, 'device_ids':removed_styles, 'images':removed_images}
+    allowed_types = set(dcim.DeviceType.objects.restrict(user, 'view').filter(pk__in=[p['device_type_id'] for p in current.get('planned_devices', [])]).values_list('pk', flat=True))
+    invalid_planned = [p['id'] for p in current.get('planned_devices', []) if p['rack_id'] not in racks or p['device_type_id'] not in allowed_types]
+    if 'planned_devices' in current:
+        current['planned_devices'] = [p for p in current['planned_devices'] if p['id'] not in invalid_planned]
+    changes = {'rack_ids':removed, 'device_ids':removed_styles, 'images':removed_images, 'planned_ids':invalid_planned}
     token = hashlib.sha256(json.dumps({'revision':room.revision, 'changes':changes}, sort_keys=True).encode()).hexdigest()
     return current, racks, changes, token
 
@@ -232,3 +238,57 @@ def cables(request, pk):
                 result.append({'id':cable.pk, 'label':cable.label or f'Cable {cable.pk}', 'url':cable.get_absolute_url(),
                                'status':cable.status, 'color':'#'+(cable.color or '168a87'), 'ends':ends})
     return JsonResponse({'cables':result, 'truncated':len(found)>500})
+
+
+def planning_request(request, pk):
+    location = get_object_or_404(dcim.Location.objects.restrict(request.user, 'view'), pk=pk)
+    room = RoomLayout.objects.filter(location=location).first()
+    if room and not RoomLayout.objects.restrict(request.user, 'view').filter(pk=room.pk).exists():
+        raise PermissionDenied
+    payload = body(request) if request.method == 'POST' else {
+        'include_descendants': bool(room and room.include_descendants),
+        'planned_devices': (room.scene or {}).get('planned_devices', []) if room else []}
+    include = payload.get('include_descendants', False)
+    if not isinstance(include, bool):
+        raise SceneError('하위 Location 포함 값은 true/false여야 합니다.')
+    racks = capacity_inventory(request.user, location, include)
+    planned = payload.get('planned_devices', [])
+    # GET uses only visible saved plan entries, and hides affected forecasts if incomplete.
+    if room:
+        active = (room.scene or {}).get('planned_devices', [])
+        allowed = {t['id'] for t in planned_types(request.user, active)}
+        blocked = {p['rack_id'] for p in active if p['device_type_id'] not in allowed}
+        for rack in racks:
+            if rack['id'] in blocked:
+                rack['complete'] = False
+        if request.method == 'GET':
+            visible_racks = {r['id'] for r in racks}
+            planned = [p for p in planned if p['rack_id'] in visible_racks and p['device_type_id'] in allowed]
+    return payload, racks, planned
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+@guarded
+def capacity(request, pk):
+    _, racks, planned = planning_request(request, pk)
+    return JsonResponse(analyze(racks, planned_types(request.user, planned), planned))
+
+
+@login_required
+@require_http_methods(['POST'])
+@guarded
+def recommendations(request, pk):
+    payload, racks, planned = planning_request(request, pk)
+    type_id = integer(payload.get('device_type_id'), '장비 유형', 1, 2**63-1)
+    return JsonResponse(recommend(racks, planned_types(request.user, planned, [type_id]), planned, type_id, payload.get('face')))
+
+
+@login_required
+@require_http_methods(['GET'])
+@guarded
+def device_types(request, pk):
+    planning_request(request, pk)
+    query = request.GET.get('q', '')[:100]
+    rows = list(dcim.DeviceType.objects.restrict(request.user, 'view').filter(model__icontains=query).order_by('model', 'pk')[:201])
+    return JsonResponse({'device_types': [type_row(dt) for dt in rows[:200]], 'truncated': len(rows) > 200})

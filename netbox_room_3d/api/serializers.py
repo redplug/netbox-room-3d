@@ -10,7 +10,11 @@ class RoomLayoutSerializer(NetBoxModelSerializer):
     scene = serializers.SerializerMethodField()
 
     def get_scene(self, obj):
-        return {key: value for key, value in (obj.scene or {}).items() if not key.startswith('_')}
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            from netbox_room_3d.services import inventory, visible_scene
+            return visible_scene(obj, inventory(request.user, obj.location, obj.include_descendants), request.user)[0]
+        return {key: value for key, value in (obj.scene or {}).items() if not key.startswith('_') and key != 'planned_devices'}
 
     def get_url(self, obj):
         return obj.get_absolute_url()

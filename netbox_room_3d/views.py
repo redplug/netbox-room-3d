@@ -16,6 +16,7 @@ from .models import RoomLayout
 from .history import append_history
 from .services import inventory, visible_scene
 from .validation import SceneError, integer, validate_scene
+from .capacity import validate_planned
 
 
 @login_required
@@ -46,7 +47,7 @@ def locations(request):
 
 def response_data(request, location, room, racks):
     if room:
-        scene, complete = visible_scene(room, racks)
+        scene, complete = visible_scene(room, racks, request.user)
         scene.pop('_history', None)
         can_edit = complete and RoomLayout.objects.restrict(request.user, 'change').filter(pk=room.pk).exists()
         layout = {k: getattr(room, k) for k in ('name', 'width', 'depth', 'height', 'grid', 'revision', 'include_descendants')}
@@ -96,10 +97,14 @@ def location_scene(request, pk):
             if room:
                 # Check the old scope so explicitly removing descendants is allowed.
                 previous_racks = inventory(request.user, location, room.include_descendants)
-                if not visible_scene(room, previous_racks)[1]:
+                if not visible_scene(room, previous_racks, request.user)[1]:
                     raise PermissionDenied('조회할 수 없는 기존 배치가 포함되어 있습니다.')
+            if room and 'planned_devices' not in payload and 'planned_devices' in room.scene:
+                payload['planned_devices'] = room.scene['planned_devices']
             device_map = {d['id']: d for r in racks.values() for d in r['devices']}
             validated = validate_scene(payload, racks, set(device_map))
+            if 'planned_devices' in validated['scene']:
+                validated['scene']['planned_devices'] = validate_planned(request.user, location, validated['include_descendants'], validated['scene']['planned_devices'])
             validated['scene']['_history'] = append_history(room, timezone.now().isoformat()) if room else []
             validated['scene']['_plans'] = (room.scene or {}).get('_plans', []) if room else []
             for device_id, appearance in validated['scene']['appearances'].items():
@@ -146,6 +151,7 @@ def layout_history(request, pk):
         devices = {d['id']: d for r in racks.values() for d in r['devices']}
         try:
             valid = validate_scene(saved, racks, set(devices))
+            validate_planned(request.user, location, valid['include_descendants'], valid['scene'].get('planned_devices', []))
             for device_id, appearance in valid['scene']['appearances'].items():
                 allowed = {image['id'] for image in devices[int(device_id)]['images']}
                 if any(appearance.get(f'{face}_image_id') is not None and appearance[f'{face}_image_id'] not in allowed for face in ('front', 'rear')):

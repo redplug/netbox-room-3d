@@ -369,6 +369,7 @@ async function start() {
       editable: canEdit(), busy, canCleanup: !!data?.can_cleanup, demo: api.demo,
       url: locations.find(l => l.id === locationId)?.url,
       setBusy, view: next => { mode = next; scene.view(mode, selected); render(); },
+      highlight: id => { selected = {rackId:id}; mode = '3d'; render(); scene.view('front',selected); },
       apply: next => { if (!canEdit()) throw new Error('읽기 전용입니다.'); remember(); layout = next; changed(); },
       revision: revision => { layout.revision = revision; baseline.revision = revision; undo.forEach(entry => { entry.layout.revision = revision; }); changed(); },
       replace: result => { data = result; layout = clone(result.layout); baseline = clone(layout); baselineRacks = result.racks; selected = null; undo = []; dirty = false; render(); },

@@ -1,4 +1,5 @@
 import { demoData } from './demo.js';
+import { capacityPreview, demoRacks, demoTypes } from './capacity.js';
 
 export class API {
   constructor(root) { this.demo = root.dataset.demo === 'true'; this.url = root.dataset.api; this.locations = []; }
@@ -29,6 +30,8 @@ export class API {
   async save(id, layout) {
     if (this.demo) {
       const current = await this.load(id);
+      const issues = capacityPreview(demoRacks(current.racks),demoTypes,layout.planned_devices||[]).issues;
+      if (issues.length) throw new Error(issues.map(i=>i.message).join(' / '));
       if (current.layout.revision !== layout.revision) throw new Error('다른 탭에서 먼저 저장했습니다. 다시 불러오세요.');
       const saved = structuredClone(layout); saved.revision++;
       const historyKey = `room3d-history-${id}`, history = JSON.parse(localStorage.getItem(historyKey) || '[]');

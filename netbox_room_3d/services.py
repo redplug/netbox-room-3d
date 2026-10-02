@@ -80,7 +80,7 @@ def inventory(user, location, include_descendants=False):
     return racks
 
 
-def visible_scene(room, racks):
+def visible_scene(room, racks, user):
     """Never send hidden inventory IDs or settings to the client."""
     scene = deepcopy({key:value for key,value in (room.scene or {}).items() if not key.startswith('_')})
     device_ids = {str(d['id']) for r in racks.values() for d in r['devices']}
@@ -88,7 +88,11 @@ def visible_scene(room, racks):
     appearances = scene.get('appearances', {})
     scene['placements'] = [p for p in placements if p['rack_id'] in racks]
     scene['appearances'] = {k: v for k, v in appearances.items() if k in device_ids}
+    planned = scene.get('planned_devices', [])
+    types = set(DeviceType.objects.restrict(user, 'view').filter(pk__in=[p['device_type_id'] for p in planned]).values_list('pk', flat=True))
+    if 'planned_devices' in scene:
+        scene['planned_devices'] = [p for p in planned if p['rack_id'] in racks and p['device_type_id'] in types]
     scene.setdefault('grid_origin', 'top-left')
     scene.setdefault('blocks', [])
-    complete = len(placements) == len(scene['placements']) and len(appearances) == len(scene['appearances'])
+    complete = len(placements) == len(scene['placements']) and len(appearances) == len(scene['appearances']) and len(planned) == len(scene.get('planned_devices', []))
     return scene, complete

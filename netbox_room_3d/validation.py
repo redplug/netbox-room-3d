@@ -44,6 +44,25 @@ def clearance_shape(item, policy):
             'z': item['z'] + (offset if rotation == 0 else -offset if rotation == 180 else 0)}
 
 
+def clean_planned_devices(source):
+    if not isinstance(source, list) or len(source) > 1000:
+        raise SceneError('가상 장비는 최대 1,000개입니다.')
+    result, seen = [], set()
+    for row in source:
+        if not isinstance(row, dict) or not isinstance(row.get('id'), str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', row['id']) or row['id'] in seen:
+            raise SceneError('가상 장비 ID가 잘못되었거나 중복되었습니다.')
+        seen.add(row['id'])
+        name = row.get('name')
+        if not isinstance(name, str) or not name.strip() or len(name) > 100:
+            raise SceneError('가상 장비 이름은 1~100자여야 합니다.')
+        position = number(row.get('position'), '시작 U', .5, 100000)
+        if position * 2 != int(position * 2) or row.get('face') not in ('front', 'rear'):
+            raise SceneError('시작 U는 0.5U 단위이며 장착면은 전·후면이어야 합니다.')
+        result.append({'id': row['id'], 'name': name.strip(), 'rack_id': integer(row.get('rack_id'), '랙 ID', 1, 2**63-1),
+                       'device_type_id': integer(row.get('device_type_id'), '장비 유형', 1, 2**63-1), 'position': position, 'face': row['face']})
+    return result
+
+
 def validate_scene(payload, racks, device_ids):
     if not isinstance(payload, dict):
         raise SceneError('JSON 객체가 필요합니다.')
@@ -181,4 +200,6 @@ def validate_scene(payload, racks, device_ids):
         result['scene']['clearance'] = policy
     if 'zones' in payload:
         result['scene']['zones'] = clean_zones
+    if 'planned_devices' in payload:
+        result['scene']['planned_devices'] = clean_planned_devices(payload['planned_devices'])
     return result

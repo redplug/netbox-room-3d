@@ -16,6 +16,7 @@ export function createOverlays(scene) {
     mesh.position.set(m(item.x), y, m(item.z)); group.add(mesh);
   }
   function outline(item, color) {
+    if (![item.x,item.z,item.width,item.depth].every(Number.isFinite)) return;
     const box = new THREE.BoxGeometry(m(item.width), Math.max(.02, m(item.height || 10)), m(item.depth));
     const edges = new THREE.EdgesGeometry(box); box.dispose();
     const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, transparent: true, opacity: .9, depthTest: false }));
