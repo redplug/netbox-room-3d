@@ -37,6 +37,23 @@ for (const [key, text] of [['assetTags', '자산번호 전체 표시'], ['serial
   input.type = 'checkbox'; input.id = `r3-${key}`; input.checked = opts[key];
   label.append(input, document.createTextNode(` ${text}`)); $('.r3-footer > div').append(label);
 }
+const walkHeightControls = document.createElement('div');
+walkHeightControls.id = 'r3-walk-height-controls'; walkHeightControls.setAttribute('role', 'group');
+walkHeightControls.setAttribute('aria-label', '워킹 시점 높이');
+Object.assign(walkHeightControls.style, { display: 'none', position: 'absolute', right: '12px', bottom: '32px', zIndex: '3', alignItems: 'center', gap: '4px', padding: '6px', maxWidth: 'calc(100% - 24px)', background: '#ffffffed', borderRadius: '6px', boxShadow: '0 2px 10px #17384612' });
+walkHeightControls.innerHTML = '<button type="button" class="r3-btn small" data-walk-height="-0.25" aria-label="시점 높이 내리기" title="Q / Page Down">높이 -</button><span id="r3-walk-height-value" aria-label="현재 시점 높이">1.65 m</span><button type="button" class="r3-btn small" data-walk-height="0.25" aria-label="시점 높이 올리기" title="E / Page Up">높이 +</button>';
+$('.r3-stage').append(walkHeightControls);
+function showWalkHeight(height) {
+  $('#r3-walk-height-value').textContent = `${height.toFixed(2)} m`;
+  const limits = scene?.layout ? scene.walkHeightLimits() : null;
+  walkHeightControls.querySelector('[data-walk-height="-0.25"]').disabled = !limits || height <= limits.min + 1e-9;
+  walkHeightControls.querySelector('[data-walk-height="0.25"]').disabled = !limits || height >= limits.max - 1e-9;
+}
+walkHeightControls.addEventListener('click', event => {
+  const button = event.target.closest('[data-walk-height]');
+  if (!button || mode !== 'walk') return;
+  scene.changeWalkHeight(Number(button.dataset.walkHeight)); scene.renderer.domElement.focus();
+});
 const versionLabel = document.createElement('span'); versionLabel.className = 'r3-version';
 versionLabel.textContent = `Room 3D v${root.dataset.version || packageInfo.version}`;
 versionLabel.setAttribute('aria-label', 'Room 3D plugin version');
@@ -118,6 +135,8 @@ function renderLocations() {
 function render(keepInspector = false, syncScene = true) {
   if (!data || !layout) return;
   const problems = errors(layout, data.racks);
+  walkHeightControls.style.display = mode === 'walk' ? 'flex' : 'none';
+  if (mode === 'walk' && scene?.camera) showWalkHeight(scene.camera.position.y);
   $('#r3-grid-size').value = layout.grid; $('#r3-grid-size').disabled = !canEdit();
   $('#r3-grid-origin').value = layout.grid_origin || 'top-left'; $('#r3-grid-origin').disabled = !canEdit();
   $('#r3-save-state').textContent = !data.can_edit ? '읽기 전용' : busy ? '처리 중…' : dirty ? '저장하지 않은 변경' : `저장됨 · v${layout.revision}`;
@@ -143,7 +162,7 @@ function render(keepInspector = false, syncScene = true) {
   $('#r3-block-list').innerHTML = layout.blocks.map(b => `<button class="r3-block-item" data-action="select-block" data-id="${esc(b.id)}">▧ ${esc(b.name)}</button>`).join('');
   $('#r3-scene-stats').textContent = `${layout.placements.length} / ${data.racks.length} 랙 배치 · ${data.racks.filter(r => placed.has(r.id)).reduce((n, r) => n + r.devices.length, 0)} 장비`;
   $('#r3-invalid').hidden = !problems.length; $('#r3-invalid').textContent = problems.length ? `저장 전 확인 · ${problems.slice(0, 3).join(' / ')}` : '';
-  $('#r3-controls-help').textContent = mode === 'walk' ? 'WASD / 방향키 이동 · 드래그 둘러보기 · Shift 빠르게 · Esc 종료' : mode === 'top' ? '랙 드래그 배치 · 우클릭 이동 · 휠 확대' : '드래그 회전 · 우클릭 이동 · 휠 확대';
+  $('#r3-controls-help').textContent = mode === 'walk' ? 'WASD 이동 · Q/E 높이 · 드래그 시선 · Shift 빠르게 · Esc 종료' : mode === 'top' ? '랙 드래그 배치 · 우클릭 이동 · 휠 확대' : '드래그 회전 · 우클릭 이동 · 휠 확대';
   $('[data-action=fit]').textContent = mode === 'walk' ? '시작 위치' : '전체 보기';
   $('[data-action=fit]').title = mode === 'walk' ? '워킹 시작 위치로 이동' : '전체 보기';
   root.querySelectorAll('[data-action=view]').forEach(b => b.classList.toggle('active', b.dataset.view === mode));
@@ -329,6 +348,7 @@ async function start() {
     scene = new RoomScene($('#r3-canvas'), {
       exitWalk: () => { mode = '3d'; scene.view(mode, selected); render(); },
       walkError: () => notice('걸어 다닐 빈 공간이 없습니다. 서버실 배치를 확인하세요.', true),
+      walkHeight: height => showWalkHeight(height),
       multiSelect: hit => studio?.toggle(hit),
       selectBlock: blockId => { selected = { blockId }; render(); },
       dragStart: hit => { selected = hit.blockId ? { blockId: hit.blockId } : { rackId: hit.rackId }; render(); $('[data-action=save]').disabled = true; },

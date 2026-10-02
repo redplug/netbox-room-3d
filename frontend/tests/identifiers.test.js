@@ -22,9 +22,9 @@ function panels(device, options = {}) {
   return rows;
 }
 
-test('asset tags and serials retain their full values on both device faces', () => {
+test('custom asset numbers and serials retain their full values on both device faces', () => {
   const asset = 'ASSET-' + '0123456789'.repeat(8), serial = 'SN-' + 'ABCDEFGH'.repeat(8);
-  const rows = panels({ asset_tag: asset, serial });
+  const rows = panels({ asset_number: asset, asset_tag: 'NATIVE-TAG-NOT-SHOWN', serial });
   const identifiers = rows.filter(row => row.identifierKind);
   assert.equal(identifiers.length, 4);
   for (const rear of [false, true]) {
@@ -34,19 +34,27 @@ test('asset tags and serials retain their full values on both device faces', () 
 });
 
 test('global asset and serial toggles independently remove their labels', () => {
-  const device = { asset_tag: 'A-10', serial: 'SN-10' };
+  const device = { asset_number: 'A-10', serial: 'SN-10' };
   assert.deepEqual(panels(device, { assetTags: false }).filter(row => row.identifierKind).map(row => row.identifierKind), ['serial', 'serial']);
-  assert.deepEqual(panels(device, { serialNumbers: false }).filter(row => row.identifierKind).map(row => row.identifierKind), ['asset_tag', 'asset_tag']);
+  assert.deepEqual(panels(device, { serialNumbers: false }).filter(row => row.identifierKind).map(row => row.identifierKind), ['asset_number', 'asset_number']);
   assert.equal(panels(device, { assetTags: false, serialNumbers: false }).filter(row => row.identifierKind).length, 0);
 });
 
 test('blank identifiers create no labels and half-U panels stay within their device', () => {
-  assert.equal(panels({ asset_tag: '  ', serial: null }).filter(row => row.identifierKind).length, 0);
+  assert.equal(panels({ asset_number: '  ', serial: null }).filter(row => row.identifierKind).length, 0);
   assert.equal(panels({}).filter(row => row.identifierKind).length, 0);
   const height = .5 * .04445 - .003;
-  for (const row of panels({ u_height: .5, asset_tag: 'A', serial: 'S' }).filter(row => row.identifierKind)) {
+  for (const row of panels({ u_height: .5, asset_number: 'A', serial: 'S' }).filter(row => row.identifierKind)) {
     assert(row.height > 0);
     assert(row.y - row.height / 2 >= -height / 2);
     assert(row.y + row.height / 2 <= height / 2);
   }
+});
+
+test('native asset tags never substitute for a custom asset number and zero is displayed', () => {
+  assert.equal(panels({ asset_tag: 'NATIVE-TAG' }).filter(row => row.identifierKind).length, 0);
+  assert.equal(panels({ asset_number: null, asset_tag: 'NATIVE-TAG' }).filter(row => row.identifierKind).length, 0);
+  const identifiers = panels({ asset_number: 0 }).filter(row => row.identifierKind);
+  assert.equal(identifiers.length, 2);
+  assert(identifiers.every(row => row.text === '자산: 0'));
 });

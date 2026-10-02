@@ -64,9 +64,11 @@ def inventory(user, location, include_descendants=False):
         dt = device.device_type
         # DeviceType visibility controls access to its image/model metadata.
         type_visible = dt.pk in type_ids
+        asset_number = (device.custom_field_data or {}).get('Asset_Number')
         racks[device.rack_id]['devices'].append({
             'id': device.pk, 'name': device.name or str(device), 'url': device.get_absolute_url(),
             'asset_tag': device.asset_tag or '', 'serial': device.serial or '',
+            'asset_number': '' if asset_number is None else str(asset_number),
             'model': dt.model if type_visible else '제한된 장비 유형',
             'position': float(device.position) if device.position is not None else None,
             'face': device.face, 'u_height': float(dt.u_height), 'full_depth': dt.is_full_depth,

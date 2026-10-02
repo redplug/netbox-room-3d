@@ -74,7 +74,7 @@ test('NetBox history restores actual server data using current revision', async 
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill('room3d-local-demo');
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await page.locator('#r3-location').selectOption({ label: 'Room3D Demo IDC / 서버실 A' });
-  await expect(page.locator('.r3-statusbar .r3-version')).toHaveText('Room 3D v0.3.1');
+  await expect(page.locator('.r3-statusbar .r3-version')).toHaveText('Room 3D v0.3.2');
   await page.getByRole('button', { name: '서버실 설정', exact: true }).click();
   const name = page.getByRole('textbox', { name: '서버실 이름' }), original = await name.inputValue();
   await name.fill(`${original} QA`); await page.getByRole('button', { name: '설정 적용' }).click();

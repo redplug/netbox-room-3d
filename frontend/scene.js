@@ -47,7 +47,7 @@ export class RoomScene {
       if (e.code === 'Escape' && this.drag) { this.cancelDrag(); return; }
       if (this.mode !== 'walk') return;
       if (e.code === 'Escape') { this.handlers.exitWalk(); return; }
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(e.code)) { e.preventDefault(); this.keys.add(e.code); }
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(e.code)) { e.preventDefault(); this.keys.add(e.code); }
     });
     this.on(canvas, 'keyup', e => this.keys.delete(e.code));
     const stop = () => { this.cancelDrag(); this.keys.clear(); this.walkPointer = null; this.pointerStart = null; };
@@ -102,12 +102,30 @@ export class RoomScene {
     }
     return null;
   }
+  walkHeightLimits() {
+    const max = Math.max(.1, m(this.layout.height) - .1);
+    return { min: Math.min(.2, max), max };
+  }
+  setWalkHeight(height) {
+    if (!this.layout || !Number.isFinite(height)) return;
+    const { min, max } = this.walkHeightLimits();
+    this.camera.position.y = THREE.MathUtils.clamp(height, min, max);
+    this.handlers?.walkHeight?.(this.camera.position.y);
+  }
+  changeWalkHeight(delta) {
+    if (this.mode !== 'walk' || !Number.isFinite(delta)) return;
+    const before = this.camera.position.y;
+    this.setWalkHeight(before + delta);
+    if (before !== this.camera.position.y) this.draw();
+  }
   walkFrame(time) {
     if (this.mode !== 'walk') return;
     const dt = Math.min((time - (this.walkTime ?? time)) / 1000, .05); this.walkTime = time;
     const held = (...codes) => codes.some(c => this.keys.has(c));
     const forward = Number(held('KeyW', 'ArrowUp')) - Number(held('KeyS', 'ArrowDown'));
     const right = Number(held('KeyD', 'ArrowRight')) - Number(held('KeyA', 'ArrowLeft'));
+    const vertical = Number(held('KeyE', 'PageUp')) - Number(held('KeyQ', 'PageDown'));
+    if (vertical) this.changeWalkHeight(vertical * (held('ShiftLeft', 'ShiftRight') ? 2.8 : 1.4) * dt);
     if (forward || right) {
       const length = Math.hypot(forward, right), speed = held('ShiftLeft', 'ShiftRight') ? 2.8 : 1.4;
       const dx = (right * Math.cos(this.yaw) - forward * Math.sin(this.yaw)) / length * speed * dt;
@@ -419,7 +437,7 @@ export class RoomScene {
     if (this.mode === 'walk') {
       const p = this.camera.position;
       if (!this.walkFree(p.x, p.z)) { const start = this.walkStart(); if (start) p.copy(start); else { this.handlers.exitWalk(); this.handlers.walkError(); return; } }
-      p.y = Math.min(1.65, m(layout.height) - .1);
+      this.setWalkHeight(p.y);
     }
     const envKey = JSON.stringify([layout.width, layout.depth, layout.height, layout.grid, layout.grid_origin, opts.grid, opts.walls]);
     if (this.envKey !== envKey) {
@@ -465,7 +483,7 @@ export class RoomScene {
       const start = this.walkStart();
       if (!start) { this.handlers.walkError(); return; }
       this.mode = 'walk'; this.syncMode(); this.controls.enabled = false;
-      this.camera.position.copy(start); this.yaw = 0; this.pitch = 0;
+      this.camera.position.copy(start); this.setWalkHeight(start.y); this.yaw = 0; this.pitch = 0;
       this.camera.rotation.set(0, 0, 0, 'YXZ');
       this.renderer.domElement.focus(); this.draw();
       this.walkRAF = requestAnimationFrame(t => this.walkFrame(t)); return;

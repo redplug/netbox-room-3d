@@ -23,7 +23,7 @@ test('device faces and independent global toggles update without editing the lay
   await page.evaluate(() => {
     const scene = window.__identifierScene, rack = scene.racks.find(r => scene.layout.placements.some(p => p.rack_id === r.id));
     const device = rack.devices.find(d => d.u_height >= 2 && d.position != null);
-    device.asset_tag = 'ASSET-2026-000123'; device.serial = 'SERIAL-ABC123456789';
+    device.asset_number = 'ASSET-2026-000123'; device.asset_tag = 'NATIVE-TAG-NOT-SHOWN'; device.serial = 'SERIAL-ABC123456789';
     window.__identifierTarget = { rackId: rack.id, deviceId: device.id };
     window.__identifierOriginalLayout = JSON.stringify(scene.layout);
   });
@@ -41,8 +41,19 @@ test('device faces and independent global toggles update without editing the lay
   expect((await identifiers(page)).map(row => row.kind)).toEqual(['serial', 'serial']);
   await page.locator('#r3-serialNumbers').uncheck(); expect(await identifiers(page)).toHaveLength(0);
   await page.locator('#r3-assetTags').check();
-  expect((await identifiers(page)).map(row => row.kind)).toEqual(['asset_tag', 'asset_tag']);
+  expect((await identifiers(page)).map(row => row.kind)).toEqual(['asset_number', 'asset_number']);
   await page.locator('#r3-serialNumbers').check(); expect(await identifiers(page)).toHaveLength(4);
+  await page.evaluate(() => {
+    const target = window.__identifierTarget;
+    window.__identifierScene.racks.find(r => r.id === target.rackId).devices.find(d => d.id === target.deviceId).asset_number = null;
+  });
+  await page.locator('#r3-assetTags').dispatchEvent('change');
+  expect((await identifiers(page)).map(row => row.kind)).toEqual(['serial', 'serial']);
+  await page.evaluate(() => {
+    const target = window.__identifierTarget;
+    window.__identifierScene.racks.find(r => r.id === target.rackId).devices.find(d => d.id === target.deviceId).asset_number = 'ASSET-2026-000123';
+  });
+  await page.locator('#r3-assetTags').dispatchEvent('change'); expect(await identifiers(page)).toHaveLength(4);
   await expect(page.locator('[data-action=save]')).toBeDisabled();
   expect(await page.evaluate(() => JSON.stringify(window.__identifierScene.layout) === window.__identifierOriginalLayout)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -69,7 +80,7 @@ test('compiled NetBox viewer renders identifier response fixtures with both cont
     const rack = data.racks.find(r => r.devices.some(d => d.u_height >= 2 && d.position != null) && data.layout.placements.some(p => p.rack_id === r.id));
     if (rack) {
       const device = rack.devices.find(d => d.u_height >= 2 && d.position != null);
-      rackId = rack.id; device.asset_tag = 'NETBOX-ASSET-123'; device.serial = 'NETBOX-SERIAL-123456';
+      rackId = rack.id; device.asset_number = 'NETBOX-ASSET-123'; device.asset_tag = 'NATIVE-TAG-NOT-SHOWN'; device.serial = 'NETBOX-SERIAL-123456';
     }
     await route.fulfill({ response, json: data });
   });
@@ -80,6 +91,7 @@ test('compiled NetBox viewer renders identifier response fixtures with both cont
   await page.locator('#r3-location').selectOption({ label: 'Room3D Demo IDC / 서버실 A' });
   await expect.poll(() => page.evaluate(() => window.__identifierPaint)).toContain('자산: NETBOX-ASSET-123');
   await expect.poll(() => page.evaluate(() => window.__identifierPaint)).toContain('시리얼: NETBOX-SERIAL-123456');
+  expect(await page.evaluate(() => window.__identifierPaint)).not.toContain('자산: NATIVE-TAG-NOT-SHOWN');
   await expect(page.locator('#r3-assetTags')).toBeChecked();
   await expect(page.locator('#r3-serialNumbers')).toBeChecked();
   await page.locator('#r3-show-placed').check();

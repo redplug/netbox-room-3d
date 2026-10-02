@@ -1,4 +1,4 @@
-# 기존 설치 업데이트: v0.1.7~v0.1.9 → v0.3.1
+# 기존 설치 업데이트: v0.1.7~v0.1.9 → v0.3.2
 
 이 절차는 **이미 Room 3D를 사용하는 NetBox**에 통합 상태바, 다중 배치 편집, 반복 복사, 거리 측정, 저장 이력과 도면 내보내기을 적용합니다. 이전 성능 개선과 표시 기능도 유지합니다.
 NetBox 자체 버전, 데이터베이스, 미디어 저장소, PLUGINS와 기존 권한은 유지합니다.
@@ -9,7 +9,7 @@ NetBox 자체 버전, 데이터베이스, 미디어 저장소, PLUGINS와 기존
 아래 경로·서비스 이름은 예시입니다. 현재 설치의 경로와 서비스 이름으로 대체하세요.
 운영 서버 적용은 별도 작업이며, 이 저장소의 개발용 compose.yaml을 운영에 복사하지 않습니다.
 
-v0.3.1의 앱 하단 상태바에 Room 3D v0.3.1가 표시되는지 확인하세요. 배치 도구에서 새 기능을 사용할 수 있습니다. 저장 이력은 업데이트 이후 저장부터 기록되며 최대 20개, 합계 약 8MB 이내로 보관합니다. 기존 저장 이력을 소급 생성하지 않습니다.
+v0.3.2의 앱 하단 상태바에 Room 3D v0.3.2가 표시되는지 확인하세요. 배치 도구에서 새 기능을 사용할 수 있습니다. 저장 이력은 업데이트 이후 저장부터 기록되며 최대 20개, 합계 약 8MB 이내로 보관합니다. 기존 저장 이력을 소급 생성하지 않습니다.
 
 ## 1. 업데이트 전 준비
 
@@ -18,12 +18,12 @@ Linux/systemd 서버는 아래의 수동 다운로드·설치 명령 대신 저�
 ```sh
 sh deploy.sh
 # 특정 버전 지정
-sh deploy.sh 0.3.1
+sh deploy.sh 0.3.2
 ```
 
 인수 없이 실행하면 GitHub 최신 릴리스 버전과 로컬 `pyproject.toml` 버전을 비교합니다. 다르면 `git pull --ff-only`로 현재 추적 브랜치의 저장소를 갱신한 뒤, 확인한 릴리스 버전을 인수로 넘겨 `deploy.sh`를 다시 실행합니다. 같으면 저장소 갱신 없이 해당 버전 설치를 진행합니다. 따라서 이후 업데이트에는 `sh deploy.sh` 한 번이면 됩니다. 기준은 미공개 소스가 아닌 GitHub에 게시된 최신 릴리스입니다. 이 자동 갱신 기능이 없는 구버전 스크립트는 최초 한 번 새 스크립트로 갱신해야 합니다.
 
-버전을 직접 지정한 `sh deploy.sh 0.3.1`은 자동 버전 조회와 저장소 갱신을 생략하고 지정한 버전을 설치합니다. 자동 갱신에는 Git 저장소와 추적 브랜치가 필요하며, 로컬 추적 파일에 변경이 있거나 fast-forward 갱신이 불가능하면 설치 전에 중단합니다. 로컬 변경을 강제로 덮어쓰거나 삭제하지 않습니다.
+버전을 직접 지정한 `sh deploy.sh 0.3.2`은 자동 버전 조회와 저장소 갱신을 생략하고 지정한 버전을 설치합니다. 자동 갱신에는 Git 저장소와 추적 브랜치가 필요하며, 로컬 추적 파일에 변경이 있거나 fast-forward 갱신이 불가능하면 설치 전에 중단합니다. 로컬 변경을 강제로 덮어쓰거나 삭제하지 않습니다.
 
 다운로드, wheel 체크섬 검증, 패키지 보관, 서비스 중지, 설치, migrate, collectstatic, check, 서비스 재시작과 상태 확인을 순서대로 실행합니다. 같은 버전 재실행도 지원합니다. 설치 이후 오류가 발생하면 서비스는 중지 상태를 유지하며, 오류를 해결하고 같은 명령을 다시 실행하세요.
 
@@ -37,7 +37,7 @@ NETBOX_ROOT=/srv/netbox NETBOX_SERVICES="netbox netbox-worker" sh deploy.sh
 
 1. 유지보수 시간 동안 사용자 저장과 자동화 쓰기를 중지합니다.
 2. 기존 운영 절차로 **전체 PostgreSQL DB, NetBox 설정, 미디어**를 백업하고 복구 가능한지 확인합니다.
-   로컬 PostgreSQL의 DB 이름이 netbox인 예: `sudo -u postgres pg_dump -Fc netbox > netbox-before-room3d-0.3.1.dump`.
+   로컬 PostgreSQL의 DB 이름이 netbox인 예: `sudo -u postgres pg_dump -Fc netbox > netbox-before-room3d-0.3.2.dump`.
    외부/관리형 DB는 해당 백업 절차를 사용합니다. 비밀번호는 명령행에 넣지 않습니다.
 3. 현재 wheel/컨테이너 이미지와 설정을 롤백용으로 보관합니다. NetBox 버전은 변경하지 않습니다.
 4. 기존 서버실의 랙 배치·장비 표현을 기록하고 아래 방법으로 레이아웃 스냅샷도 보관합니다.
@@ -71,23 +71,23 @@ chmod 600 /secure-backup/room3d-before.json
 # 운영 Linux 호스트에서 실행합니다. 같은 버전의 재다운로드도 가능합니다.
 (
   set -eu
-  mkdir -p ./room3d-downloads/v0.3.1
-  cd ./room3d-downloads/v0.3.1
-  gh release download v0.3.1 --repo redplug/netbox-room-3d \
-    --pattern 'netbox_room_3d-0.3.1-py3-none-any.whl' --pattern SHA256SUMS \
+  mkdir -p ./room3d-downloads/v0.3.2
+  cd ./room3d-downloads/v0.3.2
+  gh release download v0.3.2 --repo redplug/netbox-room-3d \
+    --pattern 'netbox_room_3d-0.3.2-py3-none-any.whl' --pattern SHA256SUMS \
     --clobber
 
   # wheel이 실제로 있는지 확인하고 검증합니다.
   # 함께 받지 않은 소스 압축파일의 체크섬은 건너뜁니다.
-  test -s netbox_room_3d-0.3.1-py3-none-any.whl
+  test -s netbox_room_3d-0.3.2-py3-none-any.whl
   sha256sum --ignore-missing -c SHA256SUMS
 
   # 검증 성공 시에만 운영용 플러그인 패키지 보관 폴더로 복사합니다.
   sudo install -d -m 0755 /opt/netbox/plugin-wheels
-  sudo install -m 0644 netbox_room_3d-0.3.1-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.1-py3-none-any.whl
-  cmp netbox_room_3d-0.3.1-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.1-py3-none-any.whl
+  sudo install -m 0644 netbox_room_3d-0.3.2-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.2-py3-none-any.whl
+  cmp netbox_room_3d-0.3.2-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.2-py3-none-any.whl
 )
 ```
 
@@ -106,7 +106,7 @@ chmod 600 /secure-backup/room3d-before.json
 ```sh
 sudo systemctl stop netbox netbox-rq
 sudo /opt/netbox/venv/bin/pip install --upgrade --no-deps \
-  /opt/netbox/plugin-wheels/netbox_room_3d-0.3.1-py3-none-any.whl
+  /opt/netbox/plugin-wheels/netbox_room_3d-0.3.2-py3-none-any.whl
 sudo /opt/netbox/venv/bin/pip show netbox-room-3d
 cd /opt/netbox/netbox
 sudo /opt/netbox/venv/bin/python manage.py showmigrations netbox_room_3d
@@ -116,7 +116,7 @@ sudo systemctl start netbox netbox-rq
 sudo systemctl status netbox netbox-rq --no-pager
 ```
 
-버전은 `0.3.1`, 마이그레이션은 `[X] 0001_initial`이어야 합니다.
+버전은 `0.3.2`, 마이그레이션은 `[X] 0001_initial`이어야 합니다.
 **이번 업데이트에는 새 마이그레이션이 없으므로 migrate 실행이 필요 없습니다.**
 미적용 마이그레이션이 보이면 기존 설치 상태를 먼저 조사하세요.
 `/opt/netbox/local_requirements.txt`의 기존 Room 3D wheel 경로를 다음 두 줄로 한 번만 교체합니다.
@@ -131,9 +131,9 @@ netbox-room-3d
 
 ## 3B. 기존 netbox-docker 커스텀 이미지
 
-1. 현재 커스텀 Dockerfile의 Room 3D wheel 파일명/설치 대상을 0.3.1로 바꿉니다.
+1. 현재 커스텀 Dockerfile의 Room 3D wheel 파일명/설치 대상을 0.3.2로 바꿉니다.
    기존 NetBox 베이스 이미지 태그 또는 digest, 다른 플러그인 설치 단계는 그대로 유지합니다.
-2. 기존 빌드 방식으로 새 이미지를 생성합니다. 예: `docker build -f Dockerfile.room3d --build-arg NETBOX_IMAGE=현재_베이스_이미지 -t netbox-with-room3d:0.3.1 .`.
+2. 기존 빌드 방식으로 새 이미지를 생성합니다. 예: `docker build -f Dockerfile.room3d --build-arg NETBOX_IMAGE=현재_베이스_이미지 -t netbox-with-room3d:0.3.2 .`.
 3. 기존 Compose에서 웹·worker·사용 중인 housekeeping의 `image:`만 새 이미지로 맞춥니다.
    **DB/Redis 연결, 볼륨 이름·마운트, 설정 파일, 환경 변수, 네트워크, Compose 프로젝트명은 유지**합니다.
 4. 기존 운영 디렉터리에서 아래를 실행합니다. housekeeping을 사용하면 stop/up 대상에 함께 추가합니다.
@@ -167,7 +167,7 @@ docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage
 
 ## 5. v0.1.8로 되돌리기
 
-v0.3.1과 v0.1.8은 DB 구조가 같습니다. 기존 DB·미디어·설정을 유지하고 이전 패키지와 정적 파일을 복구합니다. v0.1.8에서 레이아웃을 다시 저장하면 `_history` 저장 이력이 제거됩니다. 롤백 전 전체 DB 및 레이아웃 JSON 백업을 보관하고, 되돌린 버전에서 저장하지 마세요.
+v0.3.2과 v0.1.8은 DB 구조가 같습니다. 기존 DB·미디어·설정을 유지하고 이전 패키지와 정적 파일을 복구합니다. v0.1.8에서 레이아웃을 다시 저장하면 `_history` 저장 이력이 제거됩니다. 롤백 전 전체 DB 및 레이아웃 JSON 백업을 보관하고, 되돌린 버전에서 저장하지 마세요.
 Linux는 서비스를 중지하고 보관한 0.1.8 wheel을 `pip install --no-deps /경로/netbox_room_3d-0.1.8-py3-none-any.whl`로 설치한 뒤
 롤백 버전을 유지하려면 `local_requirements.txt`의 `netbox-room-3d` 항목도 `netbox-room-3d==0.1.8`으로 임시 고정합니다. `--find-links` 설정과 이전 wheel은 유지합니다. `collectstatic --no-input`, `check` 후 서비스를 시작합니다.
 Docker는 관련 서비스의 `image:`를 보관한 이전 이미지로 복원하고 3B의 재생성·정적 파일 수집·검사를 반복합니다.
@@ -178,7 +178,7 @@ DB 백업 복원은 실제 데이터 손상 확인 시에만 별도 복구 계�
 
 참고: [NetBox 공식 플러그인 설치·정적 파일·서비스 갱신 절차](https://netbox.readthedocs.io/en/stable/plugins/installation/).
 
-## v0.3.1 업그레이드 주의사항
+## v0.3.2 업그레이드 주의사항
 
 - DB 테이블 변경과 신규 마이그레이션은 없습니다. 기존 배치, 배치안과 실제 인벤토리를 보존합니다.
 - 최신 자동 갱신을 지원하는 `deploy.sh`가 있는 체크아웃에서는 `sh deploy.sh` 한 번으로 최신 릴리스 조회, 필요 시 소스 갱신·재실행, 체크섬 검증, 설치와 정적 파일 갱신을 진행합니다. 자동 갱신 이전 스크립트가 남아 있다면 최초 한 번 저장소를 갱신해야 합니다.
@@ -189,4 +189,8 @@ DB 백업 복원은 실제 데이터 손상 확인 시에만 별도 복구 계�
 
 ### 장비 식별정보 표시
 
-v0.3.1은 실제 장비 조회 응답에 자산번호·시리얼 번호를 포함하고 전·후면에 표시합니다. 새 권한이나 DB 변경은 필요하지 않습니다. 기존 장비 조회 권한을 그대로 적용합니다. 배포 후 강력 새로고침하면 하단에 두 개의 전체 표시 체크박스가 나타납니다.
+v0.3.2은 실제 장비 조회 응답에 자산번호·시리얼 번호를 포함하고 전·후면에 표시합니다. 새 권한이나 DB 변경은 필요하지 않습니다. 기존 장비 조회 권한을 그대로 적용합니다. 배포 후 강력 새로고침하면 하단에 두 개의 전체 표시 체크박스가 나타납니다.
+
+### v0.3.2 자산번호 필드 수정
+
+자산번호는 기본 `asset_tag`가 아닌 Device의 커스텀 필드 `Asset_Number`에서 읽습니다. 내부 필드 이름은 대소문자를 구분합니다. 커스텀 필드가 없거나 비어 있으면 기본 자산 태그를 대신 표시하지 않습니다. 숫자 0은 표시합니다. 시리얼 번호는 기존 기본 필드 `serial`을 유지합니다. Rack에도 같은 필드가 적용되어 있더라도 장비 라벨은 해당 Device의 값만 사용합니다. 기존 커스텀 필드 정의와 데이터는 변경하지 않습니다.

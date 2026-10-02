@@ -76,7 +76,7 @@ export function buildRack(placement, rack, layout, opts) {
       mesh.material.dispose(); mesh.material = mats;
       if (opts.statuses) for (const rearFace of [false, true]) this.textPanel(device.status_label || device.status, railW * .35, Math.min(dh * .3, .025), railW * .3, -dh * .3, (rearFace ? -1 : 1) * (dd / 2 + .004), deviceGroup, rearFace, { ...deviceMeta, statusColor: statusColor(device.status) });
       const identifiers = [];
-      if (opts.assetTags && String(device.asset_tag ?? '').trim()) identifiers.push(['asset_tag', `자산: ${device.asset_tag}`]);
+      if (opts.assetTags && String(device.asset_number ?? '').trim()) identifiers.push(['asset_number', `자산: ${device.asset_number}`]);
       if (opts.serialNumbers && String(device.serial ?? '').trim()) identifiers.push(['serial', `시리얼: ${device.serial}`]);
       const identifierHeight = Math.min((dh - .002) * .22, .018);
       for (const rearFace of [false, true]) identifiers.forEach(([identifierKind, text], index) => {
