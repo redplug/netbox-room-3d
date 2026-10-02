@@ -22063,19 +22063,19 @@ class S_ {
   }
   textPanel(e, t, n, r, s, a, o, l = !1, c = {}) {
     this.state();
-    const h = JSON.stringify(["text", e, !!c.unitLabel, !!c.interfaceId, c.statusColor, !!c.isPrimary]), d = this.pool.acquire(h, () => {
-      const p = document.createElement("canvas");
-      p.width = c.unitLabel || c.interfaceId ? 128 : 512, p.height = c.interfaceId || c.unitLabel ? 128 : 64;
-      const g = p.getContext("2d");
-      g.fillStyle = c.statusColor || "#172d3b", g.fillRect(0, 0, p.width, p.height), g.fillStyle = "#f1f5f9", g.font = "bold " + (c.unitLabel ? 75 : c.interfaceId ? 23 : 45) + "px sans-serif", g.textAlign = "center", g.textBaseline = "middle", g.fillText(e, p.width / 2, p.height / 2, p.width - 12), c.interfaceId && (g.strokeStyle = c.isPrimary ? "#fbbf24" : "#82929f", g.lineWidth = c.isPrimary ? 4.5 : 2, g.strokeRect(2.5, 2.5, 123, 123));
-      const _ = new to(p);
-      _.colorSpace = Zt;
-      const m = new Yn({ map: _ });
-      return { material: m, dispose() {
-        _.dispose(), m.dispose();
+    const h = c.identifierKind ? "left" : "center", d = JSON.stringify(["text", e, !!c.unitLabel, !!c.interfaceId, c.statusColor, !!c.isPrimary, h]), u = this.pool.acquire(d, () => {
+      const g = document.createElement("canvas");
+      g.width = c.unitLabel || c.interfaceId ? 128 : 512, g.height = c.interfaceId || c.unitLabel ? 128 : 64;
+      const _ = g.getContext("2d");
+      _.fillStyle = c.statusColor || "#172d3b", _.fillRect(0, 0, g.width, g.height), _.fillStyle = "#f1f5f9", _.font = "bold " + (c.unitLabel ? 75 : c.interfaceId ? 23 : 45) + "px sans-serif", _.textAlign = h, _.textBaseline = "middle", _.fillText(e, h === "left" ? 6 : g.width / 2, g.height / 2, g.width - 12), c.interfaceId && (_.strokeStyle = c.isPrimary ? "#fbbf24" : "#82929f", _.lineWidth = c.isPrimary ? 4.5 : 2, _.strokeRect(2.5, 2.5, 123, 123));
+      const m = new to(g);
+      m.colorSpace = Zt;
+      const f = new Yn({ map: m });
+      return { material: f, dispose() {
+        m.dispose(), f.dispose();
       } };
-    }), u = new Ot(new ai(t, n), d.material);
-    u.position.set(r, s, a), u.rotation.y = l ? Math.PI : 0, u.userData = { ...c, textPanel: !0, textKey: h }, o.add(u);
+    }), p = new Ot(new ai(t, n), u.material);
+    p.position.set(r, s, a), p.rotation.y = l ? Math.PI : 0, p.userData = { ...c, textPanel: !0, textKey: d }, o.add(p);
   }
   roomObject(e, t, n) {
     const r = e.type || "pillar", s = Mr[r] || Mr.pillar, a = Qe(e.width), o = Qe(e.depth), l = Qe(e.height), c = new qt();

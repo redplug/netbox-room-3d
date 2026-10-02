@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run from the Git checkout: sh deploy.sh [0.1.10]
+# Run from the Git checkout: sh deploy.sh [0.3.2]
 set -eu
 set -f
 
@@ -16,7 +16,7 @@ usage() {
   cat <<'EOF'
 Usage: sh deploy.sh [VERSION]
   sh deploy.sh          # Latest GitHub release; update checkout if versions differ
-  sh deploy.sh 0.1.10   # Explicit version (v0.1.10 also accepted)
+  sh deploy.sh 0.3.2    # Explicit version without Git update (v0.3.2 also accepted)
 
 Optional environment settings:
   NETBOX_ROOT=/opt/netbox
@@ -25,6 +25,7 @@ Optional environment settings:
   ROOM3D_DOWNLOAD_DIR, GITHUB_REPO
 
 Linux/systemd deployment. Requires gh, sha256sum and sudo (unless root).
+Default execution also requires git and a checkout with an upstream branch.
 Run after completing your normal database/config/media backup.
 EOF
 }

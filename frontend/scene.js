@@ -303,11 +303,12 @@ export class RoomScene {
   }
   textPanel(text, width, height, x, y, z, parent, rear = false, meta = {}) {
     this.state();
-    const key = JSON.stringify(['text', text, !!meta.unitLabel, !!meta.interfaceId, meta.statusColor, !!meta.isPrimary]);
+    const textAlign = meta.identifierKind ? 'left' : 'center';
+    const key = JSON.stringify(['text', text, !!meta.unitLabel, !!meta.interfaceId, meta.statusColor, !!meta.isPrimary, textAlign]);
     const resource = this.pool.acquire(key, () => {
       const canvas = document.createElement('canvas'); canvas.width = meta.unitLabel || meta.interfaceId ? 128 : 512; canvas.height = meta.interfaceId || meta.unitLabel ? 128 : 64;
       const ctx = canvas.getContext('2d'); ctx.fillStyle = meta.statusColor || '#172d3b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold ' + (meta.unitLabel ? 75 : meta.interfaceId ? 23 : 45) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - 12);
+      ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold ' + (meta.unitLabel ? 75 : meta.interfaceId ? 23 : 45) + 'px sans-serif'; ctx.textAlign = textAlign; ctx.textBaseline = 'middle'; ctx.fillText(text, textAlign === 'left' ? 6 : canvas.width / 2, canvas.height / 2, canvas.width - 12);
       if (meta.interfaceId) {
         ctx.strokeStyle = meta.isPrimary ? '#fbbf24' : '#82929f'; ctx.lineWidth = meta.isPrimary ? 4.5 : 2; ctx.strokeRect(2.5, 2.5, 123, 123);
       }
