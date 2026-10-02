@@ -7,7 +7,7 @@ FIELDS = ('name', 'width', 'depth', 'height', 'grid', 'revision', 'include_desce
 
 def snapshot(room, saved_at):
     layout = {key: getattr(room, key) for key in FIELDS}
-    layout.update({key: deepcopy(value) for key, value in (room.scene or {}).items() if key != '_history'})
+    layout.update({key: deepcopy(value) for key, value in (room.scene or {}).items() if not key.startswith('_')})
     return {'saved_at': saved_at, 'layout': layout}
 
 

@@ -34,6 +34,16 @@ def overlaps(a, b):
     return a[0] < b[2] - .01 and a[2] > b[0] + .01 and a[1] < b[3] - .01 and a[3] > b[1] + .01
 
 
+def clearance_shape(item, policy):
+    if not policy['enabled'] or 'rack_id' not in item:
+        return item
+    offset = (policy['front'] - policy['rear']) / 2
+    rotation = item.get('rotation', 0)
+    return {**item, 'depth': item['depth'] + policy['front'] + policy['rear'],
+            'x': item['x'] + (-offset if rotation == 90 else offset if rotation == 270 else 0),
+            'z': item['z'] + (offset if rotation == 0 else -offset if rotation == 180 else 0)}
+
+
 def validate_scene(payload, racks, device_ids):
     if not isinstance(payload, dict):
         raise SceneError('JSON 객체가 필요합니다.')
@@ -51,6 +61,27 @@ def validate_scene(payload, racks, device_ids):
     if not isinstance(include, bool):
         raise SceneError('하위 Location 포함 값은 true/false여야 합니다.')
     result['include_descendants'] = include
+    policy = payload.get('clearance', {})
+    if not isinstance(policy, dict) or not isinstance(policy.get('enabled', False), bool):
+        raise SceneError('통로 설정 형식이 잘못되었습니다.')
+    policy = {'enabled': policy.get('enabled', False), 'front': number(policy.get('front', 0), '전면 여유', 0, 10000), 'rear': number(policy.get('rear', 0), '후면 여유', 0, 10000)}
+    zones = payload.get('zones', [])
+    if not isinstance(zones, list) or len(zones) > 100:
+        raise SceneError('바닥 구역은 최대 100개입니다.')
+    clean_zones, zone_ids = [], set()
+    for zone in zones:
+        if not isinstance(zone, dict) or not isinstance(zone.get('id'), str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', zone['id']) or zone['id'] in zone_ids:
+            raise SceneError('구역 ID가 잘못되었습니다.')
+        zone_ids.add(zone['id'])
+        if not isinstance(zone.get('name'), str) or not zone['name'].strip() or len(zone['name']) > 100 or not isinstance(zone.get('color'), str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', zone['color']):
+            raise SceneError('구역 이름·색상을 확인하세요.')
+        clean = {'id': zone['id'], 'name': zone['name'].strip(), 'color': zone['color'].lower()}
+        for key in ('x','z','width','depth'):
+            clean[key] = number(zone.get(key), key, 100 if key in ('width','depth') else 0)
+        bounds = box(clean)
+        if bounds[0] < 0 or bounds[1] < 0 or bounds[2] > result['width'] or bounds[3] > result['depth']:
+            raise SceneError('구역이 방 경계를 벗어납니다.')
+        clean_zones.append(clean)
     placements, blocks, appearances = [], [], {}
     source = payload.get('placements', [])
     raw_blocks = payload.get('blocks', [])
@@ -119,6 +150,11 @@ def validate_scene(payload, racks, device_ids):
         for other in all_boxes[:i]:
             if overlaps(item, other):
                 raise SceneError(f"{item['label']} / {other['label']}: 서로 겹칩니다.")
+            if overlaps(clearance_shape(item, policy), other) or overlaps(item, clearance_shape(other, policy)):
+                raise SceneError(f"{item['label']} / {other['label']}: 통로·작업 공간이 부족합니다.")
+        bounds = box(clearance_shape(item, policy))
+        if bounds[0] < 0 or bounds[1] < 0 or bounds[2] > result['width'] or bounds[3] > result['depth']:
+            raise SceneError(f"{item['label']}: 벽까지 작업 공간이 부족합니다.")
     for device_id, appearance in raw_appearances.items():
         if not isinstance(device_id, str) or not device_id.isdigit() or int(device_id) not in device_ids or not isinstance(appearance, dict):
             raise SceneError('조회할 수 없는 장비의 표시 설정입니다.')
@@ -141,4 +177,8 @@ def validate_scene(payload, racks, device_ids):
         'blocks': [{k: v for k, v in b.items() if k != 'label'} for b in blocks],
         'appearances': appearances,
     }
+    if 'clearance' in payload:
+        result['scene']['clearance'] = policy
+    if 'zones' in payload:
+        result['scene']['zones'] = clean_zones
     return result

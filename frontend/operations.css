@@ -1,0 +1,17 @@
+#room3d .r3-operations { width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 22px; overflow: auto; }
+#room3d .r3-operations::backdrop { background: #132b3a66; }
+#room3d .r3-operation-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+#room3d .r3-operation-tabs button[aria-selected=true] { background: #166b68; color: white; border-color: #166b68; }
+#room3d .r3-operation-body { display: grid; gap: 12px; }
+#room3d .r3-operation-body label { display: grid; gap: 5px; }
+#room3d .r3-operation-body .r3-check { display: flex; align-items: center; gap: 8px; }
+#room3d .r3-operation-body input, #room3d .r3-operation-body select { min-width: 0; width: 100%; }
+#room3d .r3-operation-body input[type=checkbox] { width: auto; }
+#room3d .r3-operation-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+#room3d .r3-operation-row { padding: 12px; background: #f1f6f7; border: 1px solid #d7e1e5; border-radius: 6px; overflow-wrap: anywhere; }
+#room3d .r3-operation-row .r3-btn { margin: 6px 6px 0 0; }
+#room3d .r3-operation-list { max-height: 300px; overflow: auto; display: grid; gap: 8px; }
+#room3d .r3-operation-status { min-height: 1.5em; margin-top: 14px; overflow-wrap: anywhere; }
+#room3d .r3-operation-status.error { color: #b33932; }
+#room3d .r3-zone-legend { color: #35606c; font-size: 12px; }
+@media(max-width:540px) { #room3d .r3-operations { padding: 14px; } #room3d .r3-operation-grid { grid-template-columns: 1fr; } }

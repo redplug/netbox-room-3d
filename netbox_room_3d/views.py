@@ -57,6 +57,7 @@ def response_data(request, location, room, racks):
         layout = {'name': location.name, 'width': 12000, 'depth': 8000, 'height': 3000, 'grid': 600, 'grid_origin': 'top-left',
                   'revision': 0, 'include_descendants': False, 'placements': [], 'blocks': [], 'appearances': {}}
     return JsonResponse({'layout': layout, 'racks': list(racks.values()), 'can_edit': can_edit,
+                         'can_cleanup': bool(room and request.user.is_superuser),
                          'warning': '' if complete else '일부 배치 대상이 이동·삭제되었거나 조회 권한이 없어 읽기 전용으로 표시합니다. 관리자에게 레이아웃 정리를 요청하세요.'})
 
 
@@ -100,6 +101,7 @@ def location_scene(request, pk):
             device_map = {d['id']: d for r in racks.values() for d in r['devices']}
             validated = validate_scene(payload, racks, set(device_map))
             validated['scene']['_history'] = append_history(room, timezone.now().isoformat()) if room else []
+            validated['scene']['_plans'] = (room.scene or {}).get('_plans', []) if room else []
             for device_id, appearance in validated['scene']['appearances'].items():
                 image_ids = {a['id'] for a in device_map[int(device_id)]['images']}
                 for face in ('front', 'rear'):

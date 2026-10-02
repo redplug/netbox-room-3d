@@ -82,7 +82,7 @@ def inventory(user, location, include_descendants=False):
 
 def visible_scene(room, racks):
     """Never send hidden inventory IDs or settings to the client."""
-    scene = deepcopy(room.scene or {})
+    scene = deepcopy({key:value for key,value in (room.scene or {}).items() if not key.startswith('_')})
     device_ids = {str(d['id']) for r in racks.values() for d in r['devices']}
     placements = scene.get('placements', [])
     appearances = scene.get('appearances', {})

@@ -11,3 +11,5 @@ recursive-include netbox_room_3d/templates *.html
 recursive-include netbox_room_3d/static *.js *.css
 
 include VERIFICATION-v0.1.10.md
+
+include VERIFICATION-v0.2.0.md

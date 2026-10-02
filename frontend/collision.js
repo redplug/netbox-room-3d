@@ -1,10 +1,10 @@
-import { errors, footprint, intersects } from './geometry.js';
+import { errors, footprint, intersects, clearanceShape, collisionPairs } from './geometry.js';
 import { entries } from './layout-tools.js';
 
 const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const shifted = (item, dx, dz) => ({ ...item, x: item.x + dx, z: item.z + dz });
 const inside = (item, layout) => {
-  const b = footprint(item);
+  const b = footprint(clearanceShape(item, layout.clearance));
   return b[0] >= 0 && b[1] >= 0 && b[2] <= layout.width && b[3] <= layout.depth;
 };
 function validate(layout, racks) {
@@ -26,9 +26,11 @@ function along(moving, fixed, layout, direction) {
     if (trial.some(item => !inside(item, layout))) return null;
     let push = 0;
     for (const item of trial) for (const obstacle of fixed) {
-      if (!intersects(item, obstacle)) continue;
-      const a = footprint(item), b = footprint(obstacle);
-      push = Math.max(push, sign > 0 ? b[axis + 2] - a[axis] : a[axis + 2] - b[axis]);
+      for (const [left, right] of collisionPairs(item, obstacle, layout.clearance)) {
+        if (!intersects(left, right)) continue;
+        const a = footprint(left), b = footprint(right);
+        push = Math.max(push, sign > 0 ? b[axis + 2] - a[axis] : a[axis + 2] - b[axis]);
+      }
     }
     if (!push) return { x: direction[0] * distance, z: direction[1] * distance, distance };
     distance += push;
@@ -60,7 +62,7 @@ export function repairOverlaps(layout, racks) {
   const next = structuredClone(layout), all = entries(next, racks);
   // Locked racks are anchors, regardless of their order in the saved layout.
   const fixed = all.filter(item => item.locked);
-  if (fixed.some((item, i) => !inside(item, next) || fixed.slice(0, i).some(other => intersects(item, other)))) {
+  if (fixed.some((item, i) => !inside(item, next) || fixed.slice(0, i).some(other => collisionPairs(item, other, next.clearance).some(([a,b]) => intersects(a,b))))) {
     throw new Error('잠긴 랙끼리 겹치거나 경계를 벗어납니다. 잠금을 해제하고 다시 시도하세요.');
   }
   for (const item of all.filter(item => !item.locked)) {

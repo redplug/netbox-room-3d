@@ -15,7 +15,7 @@ DOWNLOAD_ROOT=${ROOM3D_DOWNLOAD_DIR:-$SCRIPT_DIR/room3d-downloads}
 usage() {
   cat <<'EOF'
 Usage: sh deploy.sh [VERSION]
-  sh deploy.sh          # Version from this checkout's pyproject.toml
+  sh deploy.sh          # Latest GitHub release; update checkout if versions differ
   sh deploy.sh 0.1.10   # Explicit version (v0.1.10 also accepted)
 
 Optional environment settings:
@@ -36,7 +36,27 @@ as_root() {
 
 [ "$#" -le 1 ] || { usage; exit 2; }
 case ${1:-} in -h|--help) usage; exit 0 ;; esac
-VERSION=${1:-$(awk -F '"' '/^\[project\]/{project=1;next} /^\[/{project=0} project && /^version[[:space:]]*=/{print $2;exit}' "$SCRIPT_DIR/pyproject.toml")}
+if [ "$#" -eq 0 ]; then
+  command -v gh >/dev/null 2>&1 || die 'Missing command: gh'
+  CURRENT_VERSION=$(awk -F '"' '/^\[project\]/{project=1;next} /^\[/{project=0} project && /^version[[:space:]]*=/{print $2;exit}' "$SCRIPT_DIR/pyproject.toml")
+  LATEST_TAG=$(gh release view --repo "$GITHUB_REPO" --json tagName --jq '.tagName') || die 'Could not resolve the latest GitHub release. Nothing was installed.'
+  VERSION=${LATEST_TAG#v}
+  printf '%s\n' "$VERSION" | LC_ALL=C awk '/^[0-9]+\.[0-9]+\.[0-9]+$/{ok=1} END{exit !ok}' || die 'Latest release must have a version such as v0.1.10.'
+  printf '\n[version] Checkout: %s | GitHub release: %s\n' "$CURRENT_VERSION" "$VERSION"
+  if [ "$CURRENT_VERSION" != "$VERSION" ]; then
+    command -v git >/dev/null 2>&1 || die 'Missing command: git'
+    CHECKOUT_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel) || die 'Automatic updates require a Git checkout. Alternatively, pass an explicit version.'
+    [ "$CHECKOUT_ROOT" = "$SCRIPT_DIR" ] || die 'deploy.sh must be at the root of the Git checkout.'
+    git -C "$SCRIPT_DIR" diff --quiet && git -C "$SCRIPT_DIR" diff --cached --quiet || die 'Local tracked changes exist. Commit or resolve them before automatic updates.'
+    printf '\n[update] Updating checkout and restarting deploy.sh for %s\n' "$VERSION"
+    git -C "$SCRIPT_DIR" pull --ff-only || die 'Git update failed. Nothing was installed; local changes were not discarded.'
+    # Pin the resolved release when restarting: no recursive update or moving target.
+    exec sh "$SCRIPT_DIR/deploy.sh" "$VERSION"
+  fi
+  printf '\n[version] Versions match; continuing with installation.\n'
+else
+  VERSION=$1
+fi
 VERSION=${VERSION#v}
 printf '%s\n' "$VERSION" | LC_ALL=C awk '/^[0-9]+\.[0-9]+\.[0-9]+$/{ok=1} END{exit !ok}' || die 'Version must have the form 0.1.10.'
 TAG=v$VERSION

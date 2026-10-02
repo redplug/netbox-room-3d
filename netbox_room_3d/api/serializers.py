@@ -10,7 +10,7 @@ class RoomLayoutSerializer(NetBoxModelSerializer):
     scene = serializers.SerializerMethodField()
 
     def get_scene(self, obj):
-        return {key: value for key, value in (obj.scene or {}).items() if key != '_history'}
+        return {key: value for key, value in (obj.scene or {}).items() if not key.startswith('_')}
 
     def get_url(self, obj):
         return obj.get_absolute_url()

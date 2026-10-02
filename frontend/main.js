@@ -3,6 +3,7 @@ import './style.css';
 import { objectTypes } from './objects.js';
 import { API } from './api.js';
 import { createStudio } from './studio.js';
+import { createOperations } from './operations-ui.js';
 import { editMany } from './layout-tools.js';
 import { resolveMotion, repairOverlaps } from './collision.js';
 import packageInfo from '../package.json';
@@ -14,7 +15,7 @@ const clone = value => structuredClone(value);
 const root = document.querySelector('#room3d');
 const api = new API(root);
 let data, layout, baseline, baselineRacks, locationId, locations = [], selected = null, scene, dirty = false, busy = false, undo = [], dragBefore;
-let onlyRackLocations = false, studio;
+let onlyRackLocations = false, studio, operations;
 let mode = '3d', filter = '', showPlaced = false, loadGeneration = 0;
 const opts = { units: true, usage: true, statuses: true, statusFilter: '', grid: true, walls: true, labels: true, transparent: true, sides: false, deviceColors: false, snap: true };
 
@@ -145,6 +146,7 @@ function render(keepInspector = false, syncScene = true) {
   root.querySelectorAll('select').forEach(el => el.classList.add('no-ts'));
   if (syncScene) scene?.update(layout, data.racks, selected, { ...opts, editable: canEdit() });
   studio?.refresh();
+  operations?.refresh();
 }
 function inspector() {
   const panel = $('#r3-inspector');
@@ -360,6 +362,25 @@ async function start() {
         const next = { ...clone(saved), revision }, issues = errors(next, current.racks);
         if (issues.length) throw new Error(issues.join(' / '));
         remember(); layout = next; data.racks = current.racks; selected = null; changed(); scene.view(mode, selected); return true;
+      },
+    }));
+    operations = createOperations(root, () => ({
+      layout, baseline, racks: data?.racks || [], locationId, selected, scene,
+      editable: canEdit(), busy, canCleanup: !!data?.can_cleanup, demo: api.demo,
+      url: locations.find(l => l.id === locationId)?.url,
+      setBusy, view: next => { mode = next; scene.view(mode, selected); render(); },
+      apply: next => { if (!canEdit()) throw new Error('읽기 전용입니다.'); remember(); layout = next; changed(); },
+      revision: revision => { layout.revision = revision; baseline.revision = revision; undo.forEach(entry => { entry.layout.revision = revision; }); changed(); },
+      replace: result => { data = result; layout = clone(result.layout); baseline = clone(layout); baselineRacks = result.racks; selected = null; undo = []; dirty = false; render(); },
+      restore: async saved => {
+        if (!canEdit()) throw new Error('읽기 전용입니다.');
+        const requested = locationId, revision = layout.revision, before = JSON.stringify(layout);
+        const current = await api.load(requested, saved.include_descendants);
+        if (requested !== locationId || before !== JSON.stringify(layout)) throw new Error('화면이 변경되었습니다. 다시 불러오세요.');
+        if (!current.can_edit) throw new Error('현재 배치를 편집할 권한이 없습니다.');
+        const next = { ...clone(saved), revision }, issues = errors(next, current.racks);
+        if (issues.length) throw new Error(issues.join(' / '));
+        remember(); layout = next; data.racks = current.racks; selected = null; changed(); scene.view(mode, selected);
       },
     }));
     locations = await api.list(); renderLocations();
