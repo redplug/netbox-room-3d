@@ -75,11 +75,20 @@ export function buildRack(placement, rack, layout, opts) {
       }
       mesh.material.dispose(); mesh.material = mats;
       if (opts.statuses) for (const rearFace of [false, true]) this.textPanel(device.status_label || device.status, railW * .35, Math.min(dh * .3, .025), railW * .3, -dh * .3, (rearFace ? -1 : 1) * (dd / 2 + .004), deviceGroup, rearFace, { ...deviceMeta, statusColor: statusColor(device.status) });
-      const nameHeight = Math.min(dh * .65, .04);
+      const identifiers = [];
+      if (opts.assetTags && String(device.asset_tag ?? '').trim()) identifiers.push(['asset_tag', `자산: ${device.asset_tag}`]);
+      if (opts.serialNumbers && String(device.serial ?? '').trim()) identifiers.push(['serial', `시리얼: ${device.serial}`]);
+      const identifierHeight = Math.min((dh - .002) * .22, .018);
+      for (const rearFace of [false, true]) identifiers.forEach(([identifierKind, text], index) => {
+        this.textPanel(text, railW * .58, identifierHeight, -railW * .18,
+          -dh / 2 + .001 + (index + .5) * identifierHeight, (rearFace ? -1 : 1) * (dd / 2 + .006),
+          deviceGroup, rearFace, { ...deviceMeta, identifierKind });
+      });
+      const nameHeight = Math.min(dh * (identifiers.length ? .42 : .65), .04);
       this.textPanel(device.name, railW * .94, nameHeight, 0, (dh - nameHeight) / 2 - .001, dd / 2 + .001, deviceGroup, false, deviceMeta);
       const ports = device.interfaces || [];
       const columns = 8, rows = Math.ceil(ports.length / columns);
-      const size = Math.min(m(U) / 2, dh * .85 / Math.max(1, rows) * .8, railW * .94 / columns * .8);
+      const size = Math.min(m(U) / 2, (dh * .85 - identifiers.length * identifierHeight) / Math.max(1, rows) * .8, railW * .94 / columns * .8);
       const pitchX = size * 1.25, pitchY = size * 1.25;
       ports.forEach((port, i) => this.textPanel(port.name, size, size,
         railW * .47 - ((i % columns) + .5) * pitchX, dh * .425 - (Math.floor(i / columns) + .5) * pitchY,

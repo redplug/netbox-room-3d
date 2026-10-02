@@ -17,7 +17,7 @@ const api = new API(root);
 let data, layout, baseline, baselineRacks, locationId, locations = [], selected = null, scene, dirty = false, busy = false, undo = [], dragBefore;
 let onlyRackLocations = false, studio, operations;
 let mode = '3d', filter = '', showPlaced = false, loadGeneration = 0;
-const opts = { units: true, usage: true, statuses: true, statusFilter: '', grid: true, walls: true, labels: true, transparent: true, sides: false, deviceColors: false, snap: true };
+const opts = { units: true, usage: true, statuses: true, statusFilter: '', grid: true, walls: true, labels: true, transparent: true, sides: false, deviceColors: false, assetTags: true, serialNumbers: true, snap: true };
 
 root.innerHTML = `
   <div class="r3-app">
@@ -32,6 +32,11 @@ root.innerHTML = `
   </div>
   <dialog id="r3-room-dialog"><form id="r3-room-form"><div class="r3-dialog-title"><h2>서버실 기본 설정</h2><button type="button" class="r3-icon-button" data-action="close-room" aria-label="닫기">×</button></div><p>선택한 Location에 공간을 연결합니다. 모든 치수는 mm입니다.</p><label>서버실 이름<input name="name" required maxlength="100"></label><div class="r3-form-grid"><label>가로 (mm)<input type="number" name="width" min="500" max="100000" required></label><label>세로 (mm)<input type="number" name="depth" min="500" max="100000" required></label><label>높이 (mm)<input type="number" name="height" min="500" max="100000" required></label><label>격자 크기 (mm)<input type="number" name="grid" min="100" max="5000" required></label></div><label class="r3-check"><input name="include_descendants" type="checkbox"> 하위 Location의 랙 포함</label><p class="r3-help">공간을 줄이면 기존 배치가 경계를 벗어날 수 있습니다.</p><div class="r3-dialog-actions"><button type="button" data-action="close-room" class="r3-btn">닫기</button><button type="submit" class="r3-btn primary">설정 적용</button></div></form></dialog>`;
 const $ = selector => root.querySelector(selector);
+for (const [key, text] of [['assetTags', '자산번호 전체 표시'], ['serialNumbers', '시리얼 번호 전체 표시']]) {
+  const label = document.createElement('label'), input = document.createElement('input');
+  input.type = 'checkbox'; input.id = `r3-${key}`; input.checked = opts[key];
+  label.append(input, document.createTextNode(` ${text}`)); $('.r3-footer > div').append(label);
+}
 const versionLabel = document.createElement('span'); versionLabel.className = 'r3-version';
 versionLabel.textContent = `Room 3D v${root.dataset.version || packageInfo.version}`;
 versionLabel.setAttribute('aria-label', 'Room 3D plugin version');

@@ -16,10 +16,10 @@ Location에 서버실 크기를 연결하고 기존 랙을 수동 배치하는 N
 
 - 저장소: https://github.com/redplug/netbox-room-3d
 - 설치 파일: [GitHub Releases](https://github.com/redplug/netbox-room-3d/releases)
-- 현재 릴리스: **v0.3.0**
+- 현재 릴리스: **v0.3.1**
 - 패키지 허용 범위: **NetBox 4.5.x / Python 3.12 이상**. 실제 통합 검증 버전은 **NetBox 4.5.0**입니다.
 
-이미 설치된 운영 서버는 **[기존 데이터 유지 업데이트 가이드](UPGRADE.md)**를 따라 v0.1.7~v0.1.9 → v0.3.0로 업데이트하세요.
+이미 설치된 운영 서버는 **[기존 데이터 유지 업데이트 가이드](UPGRADE.md)**를 따라 v0.1.7~v0.1.9 → v0.3.1로 업데이트하세요.
 
 ## 운영 서버 배포 전 확인
 
@@ -29,30 +29,30 @@ Location에 서버실 크기를 연결하고 기존 랙을 수동 배치하는 N
 1. 운영 NetBox 버전, 가상환경 경로 또는 Docker 이미지 태그를 확인합니다. 4.5.x 이외 버전은 현재 설치를 차단합니다.
 2. 운영과 동일한 버전의 검증 환경에서 먼저 설치합니다. 4.5.0 이외의 패치 버전까지 모두 테스트한 것은 아닙니다.
 3. 기존 DB, NetBox 설정 및 미디어를 백업합니다. 설치 시 플러그인용 DB 테이블이 추가됩니다.
-4. GitHub Releases에서 `netbox_room_3d-0.3.0-py3-none-any.whl`과 `SHA256SUMS`를 다운로드합니다.
+4. GitHub Releases에서 `netbox_room_3d-0.3.1-py3-none-any.whl`과 `SHA256SUMS`를 다운로드합니다.
    비공개 저장소는 권한이 있는 GitHub 계정으로 로그인해야 합니다.
 
 ```sh
 # 운영 Linux 호스트에서 실행합니다. 같은 버전의 재다운로드도 가능합니다.
 (
   set -eu
-  mkdir -p ./room3d-downloads/v0.3.0
-  cd ./room3d-downloads/v0.3.0
-  gh release download v0.3.0 --repo redplug/netbox-room-3d \
-    --pattern 'netbox_room_3d-0.3.0-py3-none-any.whl' --pattern SHA256SUMS \
+  mkdir -p ./room3d-downloads/v0.3.1
+  cd ./room3d-downloads/v0.3.1
+  gh release download v0.3.1 --repo redplug/netbox-room-3d \
+    --pattern 'netbox_room_3d-0.3.1-py3-none-any.whl' --pattern SHA256SUMS \
     --clobber
 
   # wheel이 실제로 있는지 확인하고 검증합니다.
   # 함께 받지 않은 소스 압축파일의 체크섬은 건너뜁니다.
-  test -s netbox_room_3d-0.3.0-py3-none-any.whl
+  test -s netbox_room_3d-0.3.1-py3-none-any.whl
   sha256sum --ignore-missing -c SHA256SUMS
 
   # 검증 성공 시에만 운영용 플러그인 패키지 보관 폴더로 복사합니다.
   sudo install -d -m 0755 /opt/netbox/plugin-wheels
-  sudo install -m 0644 netbox_room_3d-0.3.0-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.0-py3-none-any.whl
-  cmp netbox_room_3d-0.3.0-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.0-py3-none-any.whl
+  sudo install -m 0644 netbox_room_3d-0.3.1-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.1-py3-none-any.whl
+  cmp netbox_room_3d-0.3.1-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.1-py3-none-any.whl
 )
 ```
 
@@ -70,7 +70,7 @@ wheel에는 3D 화면의 JS/CSS가 포함되어 **운영 서버에 Node.js나 np
 
 ```sh
 sudo /opt/netbox/venv/bin/pip install \
-  /opt/netbox/plugin-wheels/netbox_room_3d-0.3.0-py3-none-any.whl
+  /opt/netbox/plugin-wheels/netbox_room_3d-0.3.1-py3-none-any.whl
 ```
 
 `/opt/netbox/netbox/netbox/configuration.py`의 기존 `PLUGINS` 목록에 추가합니다.
@@ -111,16 +111,16 @@ netbox-room-3d
 # Dockerfile.room3d
 ARG NETBOX_IMAGE
 FROM ${NETBOX_IMAGE}
-COPY plugin-wheels/netbox_room_3d-0.3.0-py3-none-any.whl /tmp/
+COPY plugin-wheels/netbox_room_3d-0.3.1-py3-none-any.whl /tmp/
 RUN /usr/local/bin/uv pip install --python /opt/netbox/venv/bin/python \
-    /tmp/netbox_room_3d-0.3.0-py3-none-any.whl
+    /tmp/netbox_room_3d-0.3.1-py3-none-any.whl
 ```
 
 ```sh
 # v4.5.0 환경 예시. 운영 이미지를 의도치 않게 업그레이드하지 마세요.
 docker build -f Dockerfile.room3d \
   --build-arg NETBOX_IMAGE=netboxcommunity/netbox:v4.5.0 \
-  -t netbox-with-room3d:0.3.0 .
+  -t netbox-with-room3d:0.3.1 .
 ```
 
 기존 Compose 설정에서 웹(`netbox`)과 작업자(`netbox-worker`, 사용 중이면 housekeeping 포함)가
@@ -163,7 +163,7 @@ docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage
 
 ## 업데이트 / 되돌리기
 
-**[UPGRADE.md](UPGRADE.md)**에 기존 설치의 Linux/systemd·Docker 업데이트, 백업, 데이터 비교 및 롤백 절차를 정리했습니다. v0.3.0에는 DB 마이그레이션이 없으며 기존 데이터와 호환됩니다. 격자 시작 위치를 저장한 뒤 구버전에서 재저장하면 해당 설정이 사라질 수 있으므로 롤백 주의사항을 확인하세요.
+**[UPGRADE.md](UPGRADE.md)**에 기존 설치의 Linux/systemd·Docker 업데이트, 백업, 데이터 비교 및 롤백 절차를 정리했습니다. v0.3.1에는 DB 마이그레이션이 없으며 기존 데이터와 호환됩니다. 격자 시작 위치를 저장한 뒤 구버전에서 재저장하면 해당 설정이 사라질 수 있으므로 롤백 주의사항을 확인하세요.
 
 ## 문제 해결
 
@@ -267,7 +267,7 @@ python manage.py collectstatic --no-input
 - 이미지: 개별 장비 지정 → Device Type 해당 면 이미지 → 개별 색상 → Device Role 색상.
 - 치수 미등록 시 기본 표시 치수로 보완하며 UI에 추정값임을 표시합니다.
 
-## 격자 설정 (v0.3.0)
+## 격자 설정 (v0.3.1)
 
 하단 `격자 표시`로 바닥 선을 켜고, `한 칸 (mm)`에 100~5,000 정수를 입력합니다.
 `격자 시작`에서 좌상·좌하·우상·우하 중 기준 모서리를 선택할 수 있습니다. 좌표 입력과 드래그 격자 맞춤은 오브젝트 좌측 상단을 기준으로 합니다.
@@ -369,12 +369,12 @@ NetBox의 실제 저장 API와 전면·후면 이미지 로딩 및 색상 저장
 3D 배치 저장 여부와 무관하며, 하위 Location에만 랙이 있는 상위 Location은 포함하지 않습니다.
 체크를 해제하면 전체 목록으로 돌아갑니다. 현재 화면이 필터 조건에 맞지 않아도 자동 전환하지 않아 저장하지 않은 변경을 유지합니다.
 
-## 버전 표시 (v0.3.0)
+## 버전 표시 (v0.3.1)
 
 버전은 화면에 떠 있는 별도 배지가 아니라 앱 하단 상태바에 랙·장비 수와 함께 표시합니다. 서버의 플러그인 설정에서 설치 버전을 가져옵니다.
 
 
-## 배치 도구 (v0.3.0)
+## 배치 도구 (v0.3.1)
 
 Location 오른쪽 **배치 도구** 버튼에서 사용합니다.
 
@@ -385,10 +385,10 @@ Location 오른쪽 **배치 도구** 버튼에서 사용합니다.
 - **저장 이력/복원**: 서버에 저장하기 전 배치를 최대 20개 보관합니다(합계 약 8MB 제한, 초과하면 오래된 이력부터 제거). 현재 권한과 재고에 유효한 이력만 보입니다. 복원은 편집 화면에 불러오며, **배치 저장**을 눌러 확정해야 합니다. 되돌리기로 취소할 수 있습니다. 업데이트 이전 이력은 자동 생성되지 않습니다.
 - **PNG/PDF**: 현재 배치의 이름·치수·전면 방향을 포함한 평면도를 내려받습니다. 미저장 변경도 포함되며 PDF는 1페이지 래스터 이미지로 문자 검색 및 CAD 편집용 벡터를 지원하지 않습니다.
 
-읽기 전용 사용자는 배치를 변경할 수 없지만 조회 가능한 대상의 거리 측정과 도면 내보내기를 사용할 수 있습니다. 저장 이력은 DB 백업을 대체하지 않습니다. [v0.3.0 검수 기록](VERIFICATION-v0.3.0.md)을 참고하세요.
+읽기 전용 사용자는 배치를 변경할 수 없지만 조회 가능한 대상의 거리 측정과 도면 내보내기를 사용할 수 있습니다. 저장 이력은 DB 백업을 대체하지 않습니다. [v0.3.1 검수 기록](VERIFICATION-v0.3.1.md)을 참고하세요.
 
 
-## 겹침 자동 수정과 자동 밀림 (v0.3.0)
+## 겹침 자동 수정과 자동 밀림 (v0.3.1)
 
 - 상단 **겹침 자동 수정**: 현재 Location의 겹침을 한 번에 정리합니다. 잠긴 랙을 고정하고 나머지 대상은 저장 순서대로 가까운 축 방향 빈 공간에 이동합니다. 수정 결과를 확인하고 **배치 저장**을 눌러 확정합니다. **되돌리기**로 한 번에 취소할 수 있습니다.
 - **겹침 자동 밀림**은 기본으로 켜집니다. 랙/룸 오브젝트 드래그, 좌표·바닥 치수·회전 입력, 랙 신규 배치와 배치 도구의 일괄 이동에 적용됩니다. 이동 대상만 진입 방향의 반대쪽으로 물러나며 기존 주변 대상은 밀지 않습니다.
@@ -399,7 +399,7 @@ Location 오른쪽 **배치 도구** 버튼에서 사용합니다.
 
 DB 변경이나 기존 배치의 자동 재저장은 없습니다. 읽기 전용 사용자는 두 편집 기능을 사용할 수 없습니다.
 
-## 예약 용량과 가상 증설 (v0.3.0)
+## 예약 용량과 가상 증설 (v0.3.1)
 
 운영 도구의 `예약·용량`, `설치 후보`, `가상 증설` 탭을 순서대로 사용합니다.
 
@@ -413,3 +413,7 @@ DB 변경이나 기존 배치의 자동 재저장은 없습니다. 읽기 전용
 - 계산 요청은 실제 NetBox 장비와 예약을 수정하지 않습니다. 레이아웃·배치안 저장은 기존 Room 3D 편집 권한이 필요합니다.
 - 가상 장비는 레이아웃의 `planned_devices`에 저장됩니다. 0.5U 단위, 전·후면, 전체 깊이 장비, 역방향 U 번호와 시작 U 변경을 지원합니다. 기존 데이터에 이 필드가 없으면 빈 목록으로 처리합니다.
 - 예약은 예약 객체의 원본 링크로 확인합니다. 데모 모드는 샘플 예약과 샘플 Device Type을 사용하며 실제 NetBox 인벤토리와 구분합니다.
+
+## 장비 자산번호·시리얼 표시
+
+NetBox Device의 `asset_tag`와 `serial` 값이 있으면 장비의 전·후면에 표시합니다. 하단의 `자산번호 전체 표시`, `시리얼 번호 전체 표시` 체크박스로 각각 전체 장비의 해당 표시를 켜거나 끕니다. 기본값은 표시이며, 빈 값·공백만 있는 값은 라벨을 만들지 않습니다. 표시 전환은 원본 장비와 레이아웃 저장 데이터를 변경하지 않습니다.

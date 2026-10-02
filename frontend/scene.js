@@ -426,7 +426,7 @@ export class RoomScene {
       this.disposeGroup(this.environment); this.environment = buildRoom.call(this, layout, opts); this.envKey = envKey;
     }
     const liveRacks = new Set(), liveBlocks = new Set();
-    const visual = [opts.labels, opts.units, opts.usage, opts.sides, opts.transparent, opts.deviceColors, opts.statuses];
+    const visual = [opts.labels, opts.units, opts.usage, opts.sides, opts.transparent, opts.deviceColors, opts.statuses, opts.assetTags, opts.serialNumbers];
     for (const p of layout.placements) {
       const rack = byId.get(p.rack_id); if (!rack) continue;
       liveRacks.add(rack.id);
