@@ -24,3 +24,27 @@ test('partial IP results only list matching addresses without duplicates', () =>
   assert.equal(searchIPs(d, 'server').ips.length, 2);
   assert.deepEqual(searchIPs({}, '192'), { ips: [], matched: false });
 });
+
+test('identifier matching normalizes query, preserves zero and combines status', () => {
+  const d = { asset_number: '  AsSeT-42  ', serial: 'Sn-AbC', status: 'active', asset_tag: 'native-only' };
+  for (const query of [' asset-4 ', ' SN-aB ']) assert.equal(deviceMatches(d, query, 'active'), true);
+  assert.equal(deviceMatches(d, 'asset', 'offline'), false);
+  assert.equal(deviceMatches(d, 'native-only'), false);
+  assert.equal(deviceMatches({ asset_number: 0 }, '0'), true);
+  assert.equal(deviceMatches({ serial: 0 }, '0'), true);
+  for (const value of [undefined, null, '', '   ']) {
+    assert.equal(deviceMatches({ asset_number: value, serial: value }, 'null'), false);
+    assert.equal(deviceMatches({ asset_number: value, serial: value }, 'undefined'), false);
+  }
+  assert.equal(deviceMatches({ asset_number: '<img src=x onerror="alert(1)">' }, '<IMG'), true);
+});
+
+test('result identifiers share matching rules and never use native or rack tags', async () => {
+  const { searchIdentifiers } = await import('../inventory.js');
+  assert.deepEqual(searchIdentifiers({ asset_number: '  AsSeT-42 ', serial: 0, asset_tag: 'native' }, ' asset '), [
+    { kind: 'asset_number', label: '자산번호', value: 'AsSeT-42', matched: true },
+    { kind: 'serial', label: '시리얼', value: '0', matched: false },
+  ]);
+  assert.deepEqual(searchIdentifiers({ asset_number: null, serial: '  ', asset_tag: 'native', custom_fields: { Asset_Number: 'wrong-contract' } }), []);
+  assert.equal(searchIdentifiers({ serial: 'abc' }, '   ')[0].matched, false);
+});

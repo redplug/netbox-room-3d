@@ -5,6 +5,7 @@ const identifiers = page => page.evaluate(() => {
   scene.rackNodes.get(target.rackId).group.traverse(object => {
     if (object.userData.identifierKind && object.userData.deviceId === target.deviceId) rows.push({
       kind: object.userData.identifierKind, text: JSON.parse(object.userData.textKey)[1], rear: object.rotation.y !== 0,
+      align: JSON.parse(object.userData.textKey)[6],
     });
   });
   return rows;
@@ -31,6 +32,11 @@ test('device faces and independent global toggles update without editing the lay
   await expect(page.locator('#r3-serialNumbers')).toBeChecked();
   await page.locator('#r3-assetTags').dispatchEvent('change');
   expect(await identifiers(page)).toHaveLength(4);
+  for (const kind of ['asset_number', 'serial']) {
+    const faces = (await identifiers(page)).filter(row => row.kind === kind);
+    expect(faces.map(row => row.rear).sort()).toEqual([false, true]);
+    expect(faces.every(row => row.align === 'left')).toBe(true);
+  }
   expect((await identifiers(page)).filter(row => row.text === '자산: ASSET-2026-000123')).toHaveLength(2);
   expect((await identifiers(page)).filter(row => row.text === '시리얼: SERIAL-ABC123456789')).toHaveLength(2);
   await page.evaluate(() => window.__identifierScene.view('front', window.__identifierTarget));
@@ -58,7 +64,9 @@ test('device faces and independent global toggles update without editing the lay
   expect(await page.evaluate(() => JSON.stringify(window.__identifierScene.layout) === window.__identifierOriginalLayout)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   for (const selector of ['#r3-assetTags', '#r3-serialNumbers', '.r3-version']) {
-    const box = await page.locator(selector).boundingBox(); expect(box.y + box.height).toBeLessThanOrEqual(844);
+    await expect.poll(async () => {
+      const box = await page.locator(selector).boundingBox(); return box.y + box.height;
+    }).toBeLessThanOrEqual(844);
   }
   await page.screenshot({ path: 'artifacts/identifiers-mobile.png' });
   expect(errors).toEqual([]);

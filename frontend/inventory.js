@@ -12,7 +12,14 @@ export function rackUsage(rack) {
 }
 export function deviceMatches(device, query, status = '') {
   const q = query.trim().toLowerCase();
-  return (!status || device.status === status) && (!q || [device.name, ...(device.ip_addresses || []), ...(device.primary_ips || [])].some(v => v.toLowerCase().includes(q)));
+  return (!status || device.status === status) && (!q || [device.name, ...(device.ip_addresses || []), ...(device.primary_ips || []), ...searchIdentifiers(device, query).map(row => row.value)].some(v => String(v ?? '').toLowerCase().includes(q)));
+}
+export function searchIdentifiers(device, query = '') {
+  const q = query.trim().toLowerCase();
+  return [['asset_number', '자산번호'], ['serial', '시리얼']].flatMap(([kind, label]) => {
+    const value = String(device[kind] ?? '').trim();
+    return value ? [{ kind, label, value, matched: !!q && value.toLowerCase().includes(q) }] : [];
+  });
 }
 export function searchIPs(device, query) {
   const ips = [...new Set([...(device.primary_ips || []), ...(device.ip_addresses || [])])];

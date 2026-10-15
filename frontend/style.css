@@ -146,3 +146,6 @@
 
 #room3d #r3-tool-status:empty { display:none; }
 #room3d .r3-collision-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+
+#room3d .r3-result-identifier { display:block; margin-top:5px; font-size:11px; white-space:normal; overflow-wrap:anywhere; text-align:left; }
+#room3d .r3-result-identifier mark { background:#fef08a; color:#713f12; border-radius:2px; padding:0 2px; }
