@@ -8,7 +8,7 @@ export class API {
     const response = await fetch(url, { credentials: 'same-origin', ...options,
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token, ...options.headers } });
     let data;
-    try { data = await response.json(); } catch { throw new Error('응답을 읽을 수 없습니다. 로그인 상태와 서버 로그를 확인하세요.'); }
+    try { data = await response.json(); } catch (error) { if(error.name==='AbortError')throw error; throw new Error('응답을 읽을 수 없습니다. 로그인 상태와 서버 로그를 확인하세요.'); }
     if (!response.ok) throw new Error(data.error || `요청 실패 (${response.status})`);
     return data;
   }
@@ -45,5 +45,17 @@ export class API {
   async history(id) {
     if (this.demo) return { history: JSON.parse(localStorage.getItem(`room3d-history-${id}`) || '[]') };
     return this.request(`${this.locations.find(l => l.id === id).url}history/`);
+  }
+  async devices(id, {signal} = {}) {
+    signal?.throwIfAborted();
+    if(this.demo) {
+      const rows=[];
+      for(const loc of this.locations)for(const rack of demoData(loc.id).racks)for(const d of rack.devices)
+        rows.push({...d,rack_id:rack.id,rack:rack.name,location_id:loc.id,location:loc.name,rack_unassigned:false,location_unassigned:false});
+      return {devices:id==null?rows:rows.filter(d=>d.id===id)};
+    }
+    const url=new URL('../devices/',new URL(this.url,window.location.href));
+    if(id!=null)url.searchParams.set('device',id);
+    return this.request(url, {signal});
   }
 }

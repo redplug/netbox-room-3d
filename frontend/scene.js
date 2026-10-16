@@ -458,7 +458,7 @@ export class RoomScene {
       }
       this.movePlacement('rack', rack.id, p);
       for (const mesh of node.devices.values()) {
-        mesh.parent.visible = !opts.statusFilter || mesh.userData.deviceInfo.status === opts.statusFilter;
+      mesh.parent.visible = !opts.statusFilter || mesh.userData.deviceInfo.status === opts.statusFilter || selected?.deviceId === mesh.userData.deviceId;
       }
     }
     for (const [id, node] of this.rackNodes) if (!liveRacks.has(id)) { this.removeRack(node); this.rackNodes.delete(id); this.selectionKey = undefined; }

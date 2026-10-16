@@ -20,7 +20,7 @@ from .models import RoomLayout
 from .services import inventory, visible_scene
 from .validation import SceneError, integer, validate_scene
 from .views import response_data
-from .capacity import analyze, capacity_inventory, planned_types, recommend, type_row, validate_planned
+from .capacity import analyze, capacity_inventory, find_free_units, planned_types, recommend, type_row, validate_planned
 
 
 class Conflict(SceneError):
@@ -282,6 +282,15 @@ def recommendations(request, pk):
     payload, racks, planned = planning_request(request, pk)
     type_id = integer(payload.get('device_type_id'), '장비 유형', 1, 2**63-1)
     return JsonResponse(recommend(racks, planned_types(request.user, planned, [type_id]), planned, type_id, payload.get('face')))
+
+
+@login_required
+@require_http_methods(['POST'])
+@guarded
+def free_units(request, pk):
+    payload, racks, planned = planning_request(request, pk)
+    return JsonResponse(find_free_units(racks, planned_types(request.user, planned), planned,
+                                       payload.get('height'), payload.get('face'), payload.get('full_depth', False)))
 
 
 @login_required

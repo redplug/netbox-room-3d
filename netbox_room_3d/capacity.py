@@ -179,6 +179,22 @@ def planned_types(user, planned, extra=()):
     return [type_row(dt) for dt in DeviceType.objects.restrict(user, 'view').filter(pk__in=ids)]
 
 
+def find_free_units(racks, types, planned, height, face, full_depth=False):
+    if isinstance(height, bool) or not isinstance(height, int) or height < 1 or height > 10000:
+        raise SceneError('필요 높이는 1~10000U의 양의 정수여야 합니다.')
+    if not isinstance(full_depth, bool):
+        raise SceneError('전체 깊이 값은 true/false여야 합니다.')
+    # Reuse the same collision/permission rules as Device Type recommendations.
+    requested = {'id': -1, 'model': f'{height}U', 'u_height': height, 'full_depth': full_depth}
+    result = recommend(racks, [*types, requested], planned, -1, face)
+    included = {row['rack_id'] for row in result['candidates']}
+    result['excluded'] = [{'rack_id': rack['id'], 'rack': rack['name'],
+                           'reason': '조회 범위 부족 또는 배치 정보 오류' if not state(rack)['complete']
+                           else '실제 장비·예약·가상 계획을 제외하면 필요한 연속 공간 없음'}
+                          for rack in racks if rack['id'] not in included]
+    return result
+
+
 def validate_planned(user, location, include, planned, strict=True):
     clean = clean_planned_devices(planned)
     if not clean:

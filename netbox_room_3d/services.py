@@ -22,6 +22,7 @@ def rack_data(rack):
             estimated.append(key)
     return {
         'id': rack.pk, 'name': rack.name, 'url': rack.get_absolute_url(),
+        'location_id': rack.location_id, 'location': rack.location.name if rack.location_id else '',
         'u_height': rack.u_height, 'starting_unit': rack.starting_unit,
         'desc_units': rack.desc_units, 'rail_width': rack.width * 25.4,
         'estimated': estimated, **dimensions, 'devices': [],
@@ -33,7 +34,7 @@ def inventory(user, location, include_descendants=False):
     if include_descendants:
         location_ids = list(Location.objects.restrict(user, 'view').filter(
             pk__in=location.get_descendants(include_self=True).values('pk')).values_list('pk', flat=True))
-    rack_qs = Rack.objects.restrict(user, 'view').filter(location_id__in=location_ids).select_related('rack_type')
+    rack_qs = Rack.objects.restrict(user, 'view').filter(location_id__in=location_ids).select_related('rack_type', 'location')
     racks = {rack.pk: rack_data(rack) for rack in rack_qs}
     devices = list(Device.objects.restrict(user, 'view').filter(rack_id__in=racks).select_related('device_type', 'role'))
     type_ids = set(DeviceType.objects.restrict(user, 'view').filter(pk__in=[d.device_type_id for d in devices]).values_list('pk', flat=True))

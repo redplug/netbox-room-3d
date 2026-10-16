@@ -131,7 +131,7 @@ test('compiled local NetBox search uses intercepted identifier response without 
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await page.locator('#r3-location').selectOption({ label: 'Room3D Demo IDC / 서버실 A' });
   await expect(page.locator('#r3-save-state')).toHaveText('읽기 전용');
-  await expect(page.locator('.r3-version')).toHaveText('Room 3D v0.3.3');
+  await expect(page.locator('.r3-version')).toHaveText('Room 3D v0.4.0');
   await page.locator('#r3-assetTags').uncheck(); await page.locator('#r3-serialNumbers').uncheck();
   const result = page.locator('[data-action=find-device]');
   for (const query of ['  nb-asset-4 ', ' nb-serial-4 ']) {

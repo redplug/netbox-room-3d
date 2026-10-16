@@ -4,6 +4,8 @@ import { objectTypes } from './objects.js';
 import { API } from './api.js';
 import { createStudio } from './studio.js';
 import { createOperations } from './operations-ui.js';
+import { createInventoryTools } from './inventory-tools.js';
+import { deviceDetailsHTML } from './inventory-discovery.js';
 import { editMany } from './layout-tools.js';
 import { resolveMotion, repairOverlaps } from './collision.js';
 import packageInfo from '../package.json';
@@ -15,7 +17,7 @@ const clone = value => structuredClone(value);
 const root = document.querySelector('#room3d');
 const api = new API(root);
 let data, layout, baseline, baselineRacks, locationId, locations = [], selected = null, scene, dirty = false, busy = false, undo = [], dragBefore;
-let onlyRackLocations = false, studio, operations;
+let onlyRackLocations = false, studio, operations, inventoryTools, navigationGeneration = 0;
 let mode = '3d', filter = '', showPlaced = false, loadGeneration = 0;
 const opts = { units: true, usage: true, statuses: true, statusFilter: '', grid: true, walls: true, labels: true, transparent: true, sides: false, deviceColors: false, assetTags: true, serialNumbers: true, snap: true };
 
@@ -171,6 +173,7 @@ function render(keepInspector = false, syncScene = true) {
   if (syncScene) scene?.update(layout, data.racks, selected, { ...opts, editable: canEdit() });
   studio?.refresh();
   operations?.refresh();
+  inventoryTools?.refresh();
 }
 function inspector() {
   const panel = $('#r3-inspector');
@@ -192,13 +195,33 @@ function inspector() {
 }
 function deviceInspector(d) {
   const style = layout.appearances[String(d.id)] || {};
+  const containingRack = data.racks.find(r=>r.id===selected?.rackId);
   const previews = ['front', 'rear'].map(face => {
     const image = d.images.find(i => i.id === style[`${face}_image_id`])?.url || d[`${face}_image`];
     // Demo images are authored local SVG data, NetBox images must be HTTP(S).
     const url = api.demo ? image : safeURL(image);
     return `<div class="r3-face-preview"><span>${face === 'front' ? '전면' : '후면'}</span>${url ? `<img src="${esc(url)}" alt="${esc(d.name)} ${face === 'front' ? '전면' : '후면'} 이미지">` : `<div style="background:${esc(style.color || d.color)}">설정 색상</div>`}</div>`;
   }).join('');
-  return `<div class="r3-device-detail"><div class="r3-subtitle">${esc(d.name)}</div><p class="r3-help">${d.u_height}U · ${d.face === 'rear' ? '후면 장착' : '전면 장착'} · ${esc(d.status)}</p>${link(d.url, 'NetBox 장비 상세')}<div class="r3-previews">${previews}</div><label>이미지가 없는 면의 색상<input type="color" data-edit="appearance" data-key="color" value="${esc(style.color || d.color)}" ${!canEdit() ? 'disabled' : ''}></label>${numberField('표시 깊이 (mm, 빈 값은 추정)', 'depth', style.depth ?? '', 'appearance', false, 20)}${['front', 'rear'].map(face => `<label>${face === 'front' ? '전면' : '후면'} 이미지<select data-edit="appearance" data-key="${face}_image_id" ${!canEdit() ? 'disabled' : ''}><option value="">Device Type 이미지 사용</option>${d.images.map(i => `<option value="${i.id}" ${style[`${face}_image_id`] === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select></label>`).join('')}<button data-action="reset-appearance" class="r3-btn small" ${!canEdit() ? 'disabled' : ''}>장비 표시 설정 초기화</button></div>`;
+  return `${deviceDetailsHTML({...d,location:containingRack?.location || locations.find(l=>l.id===locationId)?.name},containingRack?.name)}<div class="r3-device-detail"><div class="r3-subtitle">${esc(d.name)}</div><p class="r3-help">${d.u_height}U · ${d.face === 'rear' ? '후면 장착' : '전면 장착'} · ${esc(d.status)}</p>${link(d.url, 'NetBox 장비 상세')}<div class="r3-previews">${previews}</div><label>이미지가 없는 면의 색상<input type="color" data-edit="appearance" data-key="color" value="${esc(style.color || d.color)}" ${!canEdit() ? 'disabled' : ''}></label>${numberField('표시 깊이 (mm, 빈 값은 추정)', 'depth', style.depth ?? '', 'appearance', false, 20)}${['front', 'rear'].map(face => `<label>${face === 'front' ? '전면' : '후면'} 이미지<select data-edit="appearance" data-key="${face}_image_id" ${!canEdit() ? 'disabled' : ''}><option value="">Device Type 이미지 사용</option>${d.images.map(i => `<option value="${i.id}" ${style[`${face}_image_id`] === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select></label>`).join('')}<button data-action="reset-appearance" class="r3-btn small" ${!canEdit() ? 'disabled' : ''}>장비 표시 설정 초기화</button></div>`;
+}
+async function navigateInventory(target) {
+  if(busy)throw Error('현재 요청이 끝난 뒤 다시 이동하세요.');
+  if(!locations.some(l=>l.id===target.location))throw Error('대상 Location을 사용할 수 없습니다.');
+  const ticket=++navigationGeneration;
+  if(target.location!==locationId) {
+    if(dirty&&!window.confirm('저장하지 않은 변경을 버리고 Location을 전환할까요?'))return false;
+    if(!await load(target.location))return false;
+  }
+  if(ticket!==navigationGeneration||locationId!==target.location)return false;
+  const rack=data.racks.find(r=>r.id===target.rack),device=rack?.devices.find(d=>d.id===target.device);
+  if(target.rack&&!rack||target.device&&!device)throw Error('대상을 사용할 수 없습니다. 삭제·이동 또는 조회 권한을 확인하세요.');
+  selected=target.rack?{rackId:target.rack,deviceId:target.device}:null;
+  render();
+  if(!rack)return true;
+  if(!layout.placements.some(p=>p.rack_id===rack.id)){notice('미배치 랙입니다. 장비 상세를 표시합니다. 3D 배치는 변경하지 않았습니다.');return true;}
+  mode='3d';scene.view(device?.face==='rear'?'rear':'front',selected);render();
+  if(device&&deviceBottom(rack,device)==null){notice('위치 없음·0U·범위 초과 장비입니다. 장비 상세에서 확인하세요.');return true;}
+  scene.highlight(selected);notice(opts.statusFilter&&device&&device.status!==opts.statusFilter?'선택 장비를 상태 필터와 관계없이 강조합니다.':'선택한 대상의 위치를 강조합니다.');return true;
 }
 async function load(id) {
   const generation = ++loadGeneration;
@@ -209,8 +232,8 @@ async function load(id) {
     data = next; layout = clone(next.layout); baseline = clone(layout); baselineRacks = data.racks; locationId = id;
     selected = layout.placements[0] ? { rackId: layout.placements[0].rack_id } : null; undo = []; dirty = false;
     $('#r3-location').value = String(id); notice(data.warning);
-    busy = false; render(); scene?.view(mode, selected);
-  } catch (error) { if (generation !== loadGeneration) return; busy = false; $('#r3-location').disabled = false; notice(error.message, true); if (locationId) $('#r3-location').value = String(locationId); render(); }
+    busy = false; render(); scene?.view(mode, selected); return true;
+  } catch (error) { if (generation !== loadGeneration) return false; busy = false; $('#r3-location').disabled = false; notice(error.message, true); if (locationId) $('#r3-location').value = String(locationId); render(); return false; }
 }
 function place(id, x = layout.width / 2, z = layout.depth / 2, renderAfter = true) {
   if (!canEdit() || !data.racks.some(r => r.id === id) || layout.placements.some(p => p.rack_id === id)) return;
@@ -351,7 +374,7 @@ async function start() {
       walkHeight: height => showWalkHeight(height),
       multiSelect: hit => studio?.toggle(hit),
       selectBlock: blockId => { selected = { blockId }; render(); },
-      dragStart: hit => { selected = hit.blockId ? { blockId: hit.blockId } : { rackId: hit.rackId }; render(); $('[data-action=save]').disabled = true; },
+      dragStart: hit => { inventoryTools?.clearCandidate(); selected = hit.blockId ? { blockId: hit.blockId } : { rackId: hit.rackId }; render(); $('[data-action=save]').disabled = true; },
       dragBlock: (id, x, z) => {
         if (!canEdit()) return;
         if (autoRepel()) { moveRepelled(`block:${id}`, x, z); return; }
@@ -409,10 +432,17 @@ async function start() {
         remember(); layout = next; data.racks = current.racks; selected = null; changed(); scene.view(mode, selected);
       },
     }));
+    inventoryTools = createInventoryTools(root,api,()=>({
+      layout,racks:data?.racks||[],locationId,selected,scene,busy,demo:api.demo,
+      url:locations.find(l=>l.id===locationId)?.url,notice,navigate:navigateInventory,
+      focusRack:(id,face)=>{selected={rackId:id};mode='3d';render();scene.view(face==='rear'?'rear':'front',selected);scene.highlight(selected);},
+    }));
     locations = await api.list(); renderLocations();
-    if (!locations.length) { notice('조회할 수 있는 Location이 없습니다. NetBox의 Location과 권한을 확인하세요.', true); return; }
+    if (!locations.length) { notice('조회할 수 있는 Location이 없습니다. NetBox의 Location과 권한을 확인하세요.', true); await inventoryTools.resolveLink(); return; }
     const requested = Number(root.dataset.initialLocation || new URLSearchParams(window.location.search).get('location'));
     await load(locations.some(l => l.id === requested) ? requested : (locations.find(l => l.configured)?.id || locations[0].id));
+    if(new URLSearchParams(window.location.search).has('location')&&!locations.some(l=>l.id===Number(new URLSearchParams(window.location.search).get('location'))))notice('공유 대상 Location을 사용할 수 없습니다.',true);
+    await inventoryTools.resolveLink();
   } catch (error) { notice(`뷰어를 시작할 수 없습니다: ${error.message}`, true); }
 }
 function repelOffsets(keys, x, z) {

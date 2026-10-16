@@ -73,3 +73,14 @@ export function candidateRacks(racks,types,planned,typeId,face) {
   candidates.sort((a,b)=>b.free_u-a.free_u||b.max_contiguous_u-a.max_contiguous_u||(a.rack<b.rack?-1:a.rack>b.rack?1:0)||a.rack_id-b.rack_id);
   return {candidates,device_type:dt,unknown_racks:[...map.values()].filter(s=>!s.complete).length};
 }
+
+export function findFreeUnits(racks,types,planned,height,face,fullDepth=false) {
+  if(!Number.isInteger(height)||height<1||height>10000)throw Error('필요 높이는 1~10000U의 양의 정수여야 합니다.');
+  if(typeof fullDepth!=='boolean')throw Error('전체 깊이 값은 true/false여야 합니다.');
+  const requested={id:-1,model:`${height}U`,u_height:height,full_depth:fullDepth};
+  const result=candidateRacks(racks,[...types,requested],planned,-1,face);
+  const {map}=states(racks,types,planned),included=new Set(result.candidates.map(r=>r.rack_id));
+  result.excluded=[...map.values()].filter(s=>!included.has(s.rack.id)).map(s=>({rack_id:s.rack.id,rack:s.rack.name,
+    reason:s.complete?'실제 장비·예약·가상 계획을 제외하면 필요한 연속 공간 없음':'조회 범위 부족 또는 배치 정보 오류'}));
+  return result;
+}

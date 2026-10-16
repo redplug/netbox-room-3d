@@ -21,3 +21,6 @@ include VERIFICATION-v0.3.2.md
 
 include VERIFICATION-v0.3.3.md
 include FEATURE_PLAN-v0.3.3.md
+
+include FEATURE_PLAN-inventory-tools.md
+include VERIFICATION-inventory-tools.md

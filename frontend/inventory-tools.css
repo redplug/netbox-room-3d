@@ -1,0 +1,10 @@
+.r3-inventory-dialog{width:min(860px,calc(100vw - 24px));max-height:90dvh;overflow:auto;border:1px solid #ccd7dc;border-radius:10px;padding:20px;color:#173846;background:#fff}
+.r3-inventory-dialog::backdrop{background:#102a3e66}
+.r3-inventory-tabs,.r3-inventory-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.r3-inventory-body label{display:block;margin:10px 0}.r3-inventory-body input,.r3-inventory-body select{max-width:100%;padding:8px}
+.r3-inventory-results{display:grid;gap:8px;max-height:45dvh;overflow:auto}
+.r3-inventory-result{padding:12px;border:1px solid #d2dfe5;border-radius:6px;overflow-wrap:anywhere;text-align:left}
+.r3-inventory-result small{display:block;margin:4px 0}.r3-inventory-status{margin:10px 0;overflow-wrap:anywhere}
+.r3-inventory-details{overflow-wrap:anywhere}.r3-inventory-details dl>div{padding:7px 0;border-bottom:1px solid #e6edef}.r3-inventory-details dt{font-size:12px;color:#586d78}.r3-inventory-details dd{margin:3px 0;white-space:pre-wrap}.r3-inventory-details dd button{margin-left:8px}.r3-inventory-details h3{font-size:16px}
+.r3-inventory-fallback{width:100%;min-height:70px;overflow-wrap:anywhere}.r3-inventory-dialog .error{color:#b42318}
+@media(max-width:640px){.r3-inventory-dialog{padding:12px}.r3-inventory-details dd button{display:block;margin:5px 0}.r3-inventory-tabs button{flex:1;min-width:100px}}

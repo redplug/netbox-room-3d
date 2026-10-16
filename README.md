@@ -1,5 +1,16 @@
 # NetBox Room 3D
 
+## v0.4.0 인벤토리 도구
+
+- 모든 조회 가능 Location에서 Device `Asset_Number`와 시리얼을 부분 검색하고 위치로 이동합니다. 숫자 0과 공백 제거를 지원하며 기본 `asset_tag`나 Rack 값은 사용하지 않습니다.
+- 선택 장비의 식별정보·IP·모델·상태·랙·U 상세, 복사 실패 시 수동 복사, NetBox 원본 링크를 제공합니다.
+- 조회 권한 범위의 누락·중복 식별정보와 미할당 위치를 점검하고 수식 실행을 방지한 CSV를 내보냅니다.
+- 연속 빈 U 후보는 실제 장비, 전후면·전체 깊이·0.5U, 예약 및 저장 전 가상 계획을 반영합니다. 조회가 불완전한 랙은 제외합니다.
+- Location/랙/장비 링크는 실제 소속 Location과 현재 권한을 확인합니다. 부모에서 하위 장비를 공유해도 재열기할 수 있으며 저장 전 변경을 보호합니다.
+- 요청 취소와 후보 강조 수명주기를 검증했습니다. 랙을 이동하거나 회전·되돌리기하면 이전 후보 강조를 제거합니다.
+
+현재 v0.4.0은 로컬 검증/패키징 결과입니다. GitHub 게시나 운영 배포는 수행하지 않았습니다. 아래 v0.4.0 릴리스 다운로드 명령은 향후 게시 이후에만 사용합니다. 로컬 산출물은 `dist/v0.4.0/`, 검수 근거는 [인벤토리 도구 검수](VERIFICATION-inventory-tools.md)를 확인하세요.
+
 ## 검색·상태·U 사용 현황
 
 IP 부분 검색 결과에는 일치 IP를 서버명·랙명 아래 별도로 표시합니다. 서버명 검색에서는 조회 가능한 IP 목록을 표시합니다. 배치된 검색 결과를 선택하면 노란 강조와 위치 표지가 약 5초간 맥동한 뒤 고정됩니다. 다른 선택·검색·화면 변경 시 해제됩니다. 동작 줄이기 설정에서는 점멸 없이 표시합니다. 0U 등 3D로 표시되지 않는 장비는 소속 랙을 강조합니다.
@@ -16,14 +27,14 @@ Location에 서버실 크기를 연결하고 기존 랙을 수동 배치하는 N
 
 - 저장소: https://github.com/redplug/netbox-room-3d
 - 설치 파일: [GitHub Releases](https://github.com/redplug/netbox-room-3d/releases)
-- 소스/패키지 버전: **v0.3.3** · [GitHub Releases](https://github.com/redplug/netbox-room-3d/releases)
+- 소스/패키지 버전: **v0.4.0** · [GitHub Releases](https://github.com/redplug/netbox-room-3d/releases)
 - 패키지 허용 범위: **NetBox 4.5.x / Python 3.12 이상**. 실제 통합 검증 버전은 **NetBox 4.5.0**입니다.
 
-이미 설치된 운영 서버는 **[기존 데이터 유지 업데이트 가이드](UPGRADE.md)**를 따라 v0.1.7~v0.1.9 → v0.3.3로 업데이트하세요.
+이미 설치된 운영 서버는 **[기존 데이터 유지 업데이트 가이드](UPGRADE.md)**를 따라 v0.1.7~v0.1.9 → v0.4.0로 업데이트하세요.
 
 ## 운영 서버 배포 전 확인
 
-v0.3.3 wheel과 SHA256SUMS는 [v0.3.3 릴리스](https://github.com/redplug/netbox-room-3d/releases/tag/v0.3.3)에서 다운로드합니다. 로컬 빌드 산출물 경로는 `dist/v0.3.3/`입니다. 새 검색 기능의 검수는 [v0.3.3 검수 기록](VERIFICATION-v0.3.3.md)을 확인하세요.
+v0.4.0 wheel과 SHA256SUMS는 현재 로컬 산출물이며, 향후 릴리스 게시 후 다운로드할 수 있습니다. 로컬 빌드 산출물 경로는 `dist/v0.4.0/`입니다. 새 검색 기능의 검수는 [v0.4.0 검수 기록](VERIFICATION-inventory-tools.md)을 확인하세요.
 
 기존 NetBox에 플러그인을 추가하는 방식입니다. 별도 NetBox 서버를 만들 필요가 없습니다.
 이 저장소의 `compose.yaml`은 샘플용이므로 운영 NetBox를 대체하는 용도로 실행하지 마세요.
@@ -31,30 +42,30 @@ v0.3.3 wheel과 SHA256SUMS는 [v0.3.3 릴리스](https://github.com/redplug/netb
 1. 운영 NetBox 버전, 가상환경 경로 또는 Docker 이미지 태그를 확인합니다. 4.5.x 이외 버전은 현재 설치를 차단합니다.
 2. 운영과 동일한 버전의 검증 환경에서 먼저 설치합니다. 4.5.0 이외의 패치 버전까지 모두 테스트한 것은 아닙니다.
 3. 기존 DB, NetBox 설정 및 미디어를 백업합니다. 설치 시 플러그인용 DB 테이블이 추가됩니다.
-4. GitHub Releases에서 `netbox_room_3d-0.3.3-py3-none-any.whl`과 `SHA256SUMS`를 다운로드합니다.
+4. GitHub Releases에서 `netbox_room_3d-0.4.0-py3-none-any.whl`과 `SHA256SUMS`를 다운로드합니다.
    비공개 저장소는 권한이 있는 GitHub 계정으로 로그인해야 합니다.
 
 ```sh
 # 운영 Linux 호스트에서 실행합니다. 같은 버전의 재다운로드도 가능합니다.
 (
   set -eu
-  mkdir -p ./room3d-downloads/v0.3.3
-  cd ./room3d-downloads/v0.3.3
-  gh release download v0.3.3 --repo redplug/netbox-room-3d \
-    --pattern 'netbox_room_3d-0.3.3-py3-none-any.whl' --pattern SHA256SUMS \
+  mkdir -p ./room3d-downloads/v0.4.0
+  cd ./room3d-downloads/v0.4.0
+  gh release download v0.4.0 --repo redplug/netbox-room-3d \
+    --pattern 'netbox_room_3d-0.4.0-py3-none-any.whl' --pattern SHA256SUMS \
     --clobber
 
   # wheel이 실제로 있는지 확인하고 검증합니다.
   # 함께 받지 않은 소스 압축파일의 체크섬은 건너뜁니다.
-  test -s netbox_room_3d-0.3.3-py3-none-any.whl
+  test -s netbox_room_3d-0.4.0-py3-none-any.whl
   sha256sum --ignore-missing -c SHA256SUMS
 
   # 검증 성공 시에만 운영용 플러그인 패키지 보관 폴더로 복사합니다.
   sudo install -d -m 0755 /opt/netbox/plugin-wheels
-  sudo install -m 0644 netbox_room_3d-0.3.3-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.3-py3-none-any.whl
-  cmp netbox_room_3d-0.3.3-py3-none-any.whl \
-    /opt/netbox/plugin-wheels/netbox_room_3d-0.3.3-py3-none-any.whl
+  sudo install -m 0644 netbox_room_3d-0.4.0-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.4.0-py3-none-any.whl
+  cmp netbox_room_3d-0.4.0-py3-none-any.whl \
+    /opt/netbox/plugin-wheels/netbox_room_3d-0.4.0-py3-none-any.whl
 )
 ```
 
@@ -72,7 +83,7 @@ wheel에는 3D 화면의 JS/CSS가 포함되어 **운영 서버에 Node.js나 np
 
 ```sh
 sudo /opt/netbox/venv/bin/pip install \
-  /opt/netbox/plugin-wheels/netbox_room_3d-0.3.3-py3-none-any.whl
+  /opt/netbox/plugin-wheels/netbox_room_3d-0.4.0-py3-none-any.whl
 ```
 
 `/opt/netbox/netbox/netbox/configuration.py`의 기존 `PLUGINS` 목록에 추가합니다.
@@ -113,16 +124,16 @@ netbox-room-3d
 # Dockerfile.room3d
 ARG NETBOX_IMAGE
 FROM ${NETBOX_IMAGE}
-COPY plugin-wheels/netbox_room_3d-0.3.3-py3-none-any.whl /tmp/
+COPY plugin-wheels/netbox_room_3d-0.4.0-py3-none-any.whl /tmp/
 RUN /usr/local/bin/uv pip install --python /opt/netbox/venv/bin/python \
-    /tmp/netbox_room_3d-0.3.3-py3-none-any.whl
+    /tmp/netbox_room_3d-0.4.0-py3-none-any.whl
 ```
 
 ```sh
 # v4.5.0 환경 예시. 운영 이미지를 의도치 않게 업그레이드하지 마세요.
 docker build -f Dockerfile.room3d \
   --build-arg NETBOX_IMAGE=netboxcommunity/netbox:v4.5.0 \
-  -t netbox-with-room3d:0.3.3 .
+  -t netbox-with-room3d:0.4.0 .
 ```
 
 기존 Compose 설정에서 웹(`netbox`)과 작업자(`netbox-worker`, 사용 중이면 housekeeping 포함)가
@@ -165,7 +176,7 @@ docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage
 
 ## 업데이트 / 되돌리기
 
-**[UPGRADE.md](UPGRADE.md)**에 기존 설치의 Linux/systemd·Docker 업데이트, 백업, 데이터 비교 및 롤백 절차를 정리했습니다. v0.3.3에는 DB 마이그레이션이 없으며 기존 데이터와 호환됩니다. 격자 시작 위치를 저장한 뒤 구버전에서 재저장하면 해당 설정이 사라질 수 있으므로 롤백 주의사항을 확인하세요.
+**[UPGRADE.md](UPGRADE.md)**에 기존 설치의 Linux/systemd·Docker 업데이트, 백업, 데이터 비교 및 롤백 절차를 정리했습니다. v0.4.0에는 DB 마이그레이션이 없으며 기존 데이터와 호환됩니다. 격자 시작 위치를 저장한 뒤 구버전에서 재저장하면 해당 설정이 사라질 수 있으므로 롤백 주의사항을 확인하세요.
 
 ## 문제 해결
 

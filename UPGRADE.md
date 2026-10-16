@@ -1,3 +1,19 @@
+# v0.4.0 인벤토리 도구 업데이트
+
+v0.4.0은 현재 로컬 패키징 버전이며 GitHub 릴리스 게시와 운영 배포는 수행하지 않았습니다. 산출물은 `dist/v0.4.0/`, 검수 근거는 [검수 기록](VERIFICATION-inventory-tools.md)입니다. 아래 기존 버전의 절차는 역사 기록으로 유지합니다.
+
+1. 기존 DB, media와 설정을 백업하고 쓰기 작업을 중지합니다. DB/볼륨/미디어를 교체하거나 샘플 데이터를 넣지 않습니다.
+2. 전달받은 `netbox_room_3d-0.4.0-py3-none-any.whl`과 `SHA256SUMS`를 같은 디렉터리에서 `sha256sum --ignore-missing -c SHA256SUMS`로 확인합니다.
+3. 기존 NetBox 가상환경에 `pip install --no-deps /경로/netbox_room_3d-0.4.0-py3-none-any.whl`로 설치합니다. Docker는 기존 NetBox 베이스 이미지와 DB/media 연결을 유지한 커스텀 이미지에 새 wheel만 반영합니다.
+4. 기존 배포 절차에 따라 `collectstatic --no-input`, `check`, 웹/worker 재시작과 브라우저 강력 새로고침을 수행합니다. 앱 상태바에서 Room 3D v0.4.0을 확인합니다. 이 문서 작성 중 실제 운영 명령은 실행하지 않았습니다.
+5. 기존 배치·revision·인벤토리가 보존되는지 비교하고, 새 검색·상세·품질 CSV·연속 U·공유 링크와 기존 워킹/식별자 표시를 확인합니다.
+
+새 스키마/마이그레이션은 없습니다. Device·Rack·Location·DeviceType·Interface·IPAddress 및 예약의 기존 조회 권한과 객체 제한이 적용됩니다. 조회 범위가 불완전한 용량은 가용으로 추정하지 않습니다. 품질 리포트의 중복은 조회 가능한 범위에 한정됩니다. 자산번호는 Device `Asset_Number`만 사용합니다.
+
+`deploy.sh`의 동작은 변경하지 않았습니다. 향후 v0.4.0이 게시된 후에만 `sh deploy.sh 0.4.0`을 사용합니다. 현재 패키징 작업은 해당 스크립트나 운영 배포를 실행하지 않습니다. `seed_room3d_demo`, `flush`, `migrate zero`, 볼륨 삭제는 업데이트 절차가 아닙니다.
+
+---
+
 # 기존 설치 업데이트: v0.1.7~v0.1.9 → v0.3.3
 
 v0.3.3 다운로드는 [GitHub 릴리스](https://github.com/redplug/netbox-room-3d/releases/tag/v0.3.3)를 사용합니다. 로컬 빌드 산출물은 `dist/v0.3.3/`에 있으며 검수 범위는 [v0.3.3 검수 기록](VERIFICATION-v0.3.3.md)을 확인하세요.
